@@ -23,7 +23,7 @@
    - Select the **Skills** tab
 
 5. **Import the skill**
-   - Click **"+ Add Skill"** (or drag & drop the ZIP into the Skills panel)
+   - Click **Upload** (or drag & drop the ZIP into the Skills panel)
    - Select the downloaded ZIP file
    - The skill will be automatically extracted and registered
 
@@ -98,7 +98,7 @@ If you prefer manual installation or the UI import isn't available:
    - **Skills** 탭 선택
 
 5. **스킬 임포트**
-   - **"+ Add Skill"** 버튼 클릭 (또는 ZIP 파일을 Skills 패널에 드래그 & 드롭)
+   - **Upload** 버튼 클릭 (또는 ZIP 파일을 Skills 패널에 드래그 & 드롭)
    - 다운로드한 ZIP 파일 선택
    - 자동으로 압축 해제 및 등록됨
 

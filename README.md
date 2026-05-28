@@ -46,7 +46,7 @@ No git, no terminal, no Python install. Import a ZIP through the app's UI.
    - `doc-skills-all-quick-*.zip` — all 4 skills in one bundle (recommended)
    - Or pick a single skill ZIP (`stop-slop-quick-*.zip`, `doc-fact-check-quick-*.zip`, etc.)
 2. **Open Amazon Quick Desktop** → click **Settings** (left sidebar, bottom)
-3. Go to **Capabilities → Skills**, then click **+ Add Skill** (or drag the ZIP into the panel)
+3. Go to **Capabilities → Skills**, then click **Upload** (or drag the ZIP into the panel)
 4. Select the downloaded ZIP — Quick Desktop extracts and registers it automatically
 5. **Try it** in a new conversation:
    - `> stop slop this draft`

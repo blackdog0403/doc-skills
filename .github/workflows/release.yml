@@ -59,4 +59,6 @@ jobs:
           body_path: release_notes.md
           files: dist/*
           generate_release_notes: true
-          make_latest: true
+          # Mark *-rc*, *-beta*, *-alpha* as pre-release; only stable tags become "latest".
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          make_latest: ${{ !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha')) }}
