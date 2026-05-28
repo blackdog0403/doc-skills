@@ -60,7 +60,20 @@ output_path = "{{output_path}}"  # may be empty
 language = "{{language}}"  # "en", "ko", or "auto"
 footer = "{{footer}}"  # may be empty
 
-cmd = ["python3", os.path.expanduser("~/.local/bin/generate_styled_docx.py"), file_path]
+# Locate generate_styled_docx.py: prefer the skill bundle (ZIP install),
+# fall back to ~/.local/bin/ (developer install via setup/install-cli.sh)
+candidates = [
+    "skill/md-to-docx/scripts/generate_styled_docx.py",
+    os.path.expanduser("~/.local/bin/generate_styled_docx.py"),
+]
+script = next((p for p in candidates if os.path.exists(p)), None)
+if not script:
+    print("ERROR: generate_styled_docx.py not found.")
+    print("Re-install the skill from the latest release ZIP, or run:")
+    print("  ./setup/install-cli.sh   (developer setup)")
+    raise SystemExit(1)
+
+cmd = ["python3", script, file_path]
 
 if output_path:
     cmd.extend(["-o", output_path])
@@ -76,7 +89,7 @@ if result.returncode != 0:
 ```
 
 - **Validate**: Output .docx file exists
-- **On failure**: Check if python-docx is installed. If not, suggest `pip install python-docx`.
+- **On failure**: If the script reports a missing module (e.g., `python-docx`), inform the user. Quick Desktop ships these pre-installed; if absent, suggest updating Quick Desktop.
 
 ### Step 3: Deliver
 - **Mode**: `deterministic`
@@ -85,10 +98,10 @@ if result.returncode != 0:
 
 ## Batch Conversion
 
-When multiple files are provided, pass them all to the script:
+When multiple files are provided, pass them all to the resolved `script` (from Step 2):
 
 ```python
-cmd = ["python3", os.path.expanduser("~/.local/bin/generate_styled_docx.py"), file1, file2, ...]
+cmd = ["python3", script, file1, file2, ...]
 ```
 
 If user asks for "both English and Korean versions", look for the `-ko.md` counterpart automatically.
@@ -102,8 +115,8 @@ If user asks for "both English and Korean versions", look for the `-ko.md` count
 
 ### Don't
 - Don't try to replicate the styling in Python — always use the script
-- Don't assume python-docx is installed in the sandbox — call via subprocess from the user's Python environment
+- Don't hard-code `~/.local/bin/`; ZIP-installed users have the script at `skill/md-to-docx/scripts/generate_styled_docx.py`
 
 ### Prerequisites
-- `python-docx` must be installed in the user's system Python (`pip install python-docx`)
-- Script location: `~/.local/bin/generate_styled_docx.py`
+- `python-docx` is pre-installed in Amazon Quick Desktop's sandbox
+- Script: bundled at `skill/md-to-docx/scripts/generate_styled_docx.py` (ZIP install) or `~/.local/bin/generate_styled_docx.py` (developer install)

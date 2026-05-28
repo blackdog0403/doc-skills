@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
 build/
 .venv/
 
@@ -24,6 +23,9 @@ Thumbs.db
 # Temp
 tmp/
 *.tmp
+
+# Build artifacts (release ZIPs)
+dist/
 
 # Install-time symlinks (created by setup/link-quick.sh; absolute paths, environment-specific)
 quick/md-to-docx/scripts/

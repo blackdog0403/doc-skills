@@ -24,9 +24,10 @@ A unified skill repository that lets you write AI agent instructions once and de
 
 ## Table of Contents
 
-- [⚡ Quick Start](#-quick-start)
+- [🟢 Install via Quick Desktop UI](#-install-via-quick-desktop-ui)
+- [⚡ Quick Start (Developers)](#-quick-start-developers)
 - [📦 Skills](#-skills)
-- [🏗️ Architecture](#️-architecture)
+- [🏗 Architecture](#-architecture)
 - [📁 Repository Structure](#-repository-structure)
 - [📖 Agent-Specific Usage](#-agent-specific-usage)
 - [➕ Adding a New Skill](#-adding-a-new-skill)
@@ -37,7 +38,28 @@ A unified skill repository that lets you write AI agent instructions once and de
 
 ---
 
-## ⚡ Quick Start
+## 🟢 Install via Quick Desktop UI
+
+No git, no terminal, no Python install. Import a ZIP through the app's UI.
+
+1. **Download** a ZIP from the [latest release](../../releases/latest):
+   - `doc-skills-all-quick-*.zip` — all 4 skills in one bundle (recommended)
+   - Or pick a single skill ZIP (`stop-slop-quick-*.zip`, `doc-fact-check-quick-*.zip`, etc.)
+2. **Open Amazon Quick Desktop** → click **Settings** (left sidebar, bottom)
+3. Go to **Capabilities → Skills**, then click **+ Add Skill** (or drag the ZIP into the panel)
+4. Select the downloaded ZIP — Quick Desktop extracts and registers it automatically
+5. **Try it** in a new conversation:
+   - `> stop slop this draft`
+   - `> fact check this document`
+   - `> convert this markdown to docx`
+
+📖 Step-by-step screenshots and Korean guide: [docs/INSTALL-QUICK.md](docs/INSTALL-QUICK.md)
+
+> ℹ️ Using Kiro or Claude Code? Want auto-updates via `git pull`? See [Quick Start (Developers)](#-quick-start-developers) below.
+
+---
+
+## ⚡ Quick Start (Developers)
 
 ### 1. Clone
 
@@ -113,7 +135,7 @@ The installer:
 
 ---
 
-## 🏗️ Architecture
+## 🏗 Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐

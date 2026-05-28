@@ -24,9 +24,10 @@ AI 에이전트 지시문을 한 번 작성해 Kiro · Claude Code · Amazon Qui
 
 ## 목차
 
-- [⚡ Quick Start](#-quick-start)
+- [🟢 Quick Desktop UI로 설치](#-quick-desktop-ui로-설치)
+- [⚡ Quick Start (개발자용)](#-quick-start-개발자용)
 - [📦 스킬 목록](#-스킬-목록)
-- [🏗️ 아키텍처](#️-아키텍처)
+- [🏗 아키텍처](#-아키텍처)
 - [📁 레포 구조](#-레포-구조)
 - [📖 에이전트별 사용 가이드](#-에이전트별-사용-가이드)
 - [➕ 새 스킬 추가하기](#-새-스킬-추가하기)
@@ -37,7 +38,28 @@ AI 에이전트 지시문을 한 번 작성해 Kiro · Claude Code · Amazon Qui
 
 ---
 
-## ⚡ Quick Start
+## 🟢 Quick Desktop UI로 설치
+
+git, 터미널, Python 설치 다 필요 없습니다. 앱 UI에서 ZIP을 임포트만 하면 됩니다.
+
+1. [최신 릴리스](../../releases/latest)에서 ZIP **다운로드**:
+   - `doc-skills-all-quick-*.zip` — 4개 스킬 한 번에 (권장)
+   - 또는 개별 스킬 ZIP (`stop-slop-quick-*.zip`, `doc-fact-check-quick-*.zip` 등)
+2. **Amazon Quick Desktop 열기** → 왼쪽 사이드바 하단 **Settings** 클릭
+3. **Capabilities → Skills** 이동 후 **+ Add Skill** 클릭 (또는 패널에 ZIP 드래그)
+4. 다운로드한 ZIP 선택 — Quick Desktop이 자동으로 압축 해제 후 등록
+5. 새 대화에서 **사용해보기**:
+   - `> AI 티 빼줘`
+   - `> 이 문서 팩트체크해줘`
+   - `> md를 docx로 변환해줘`
+
+📖 스크린샷 포함 상세 가이드 (영문 + 한국어): [docs/INSTALL-QUICK.md](docs/INSTALL-QUICK.md)
+
+> ℹ️ Kiro · Claude Code 사용자거나 `git pull` 자동 업데이트가 필요하면 아래 [Quick Start (개발자용)](#-quick-start-개발자용)로.
+
+---
+
+## ⚡ Quick Start (개발자용)
 
 ### 1. Clone
 
@@ -111,7 +133,7 @@ chmod +x setup/*.sh
 
 ---
 
-## 🏗️ 아키텍처
+## 🏗 아키텍처
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐

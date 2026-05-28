@@ -1,0 +1,62 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build release ZIPs
+        run: |
+          chmod +x scripts/build-release.sh
+          ./scripts/build-release.sh ${{ steps.version.outputs.VERSION }}
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ## 📦 Amazon Quick Desktop Skills
+
+          Download individual skill ZIPs or the all-in-one package.
+
+          ### Installation
+
+          1. Download the ZIP for your skill(s)
+          2. Unzip and move the folder to:
+             - **Mac**: `~/.quickwork/profiles/federate-prod/skills/`
+             - **Windows**: `%USERPROFILE%\.quickwork\profiles\federate-prod\skills\`
+          3. Restart Amazon Quick Desktop
+
+          👉 See [INSTALL-QUICK.md](docs/INSTALL-QUICK.md) for detailed instructions (English + 한국어)
+
+          ### Skills included
+
+          | File | Skill | Description |
+          |------|-------|-------------|
+          | `doc-fact-check-quick-*.zip` | 🔍 Document Fact Checker | Verify claims against AWS official sources |
+          | `md-to-docx-quick-*.zip` | 📄 Markdown to DOCX | Convert MD → styled Word with AWS branding |
+          | `translate-pptx-quick-*.zip` | 🌐 Translate PPTX | Translate presentations between languages |
+          | `stop-slop-quick-*.zip` | ✂️ Stop Slop | Remove AI writing patterns from prose |
+          | `doc-skills-all-quick-*.zip` | 📦 All Skills | Everything in one package |
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: dist/*
+          generate_release_notes: true
+          make_latest: true
