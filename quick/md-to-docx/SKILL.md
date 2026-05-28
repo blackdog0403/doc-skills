@@ -23,7 +23,7 @@ inputs:
     type: string
     required: false
   - name: margins
-    description: "Page margins in cm as 'top,bottom,left,right' (e.g. '1.91,1.91,1.27,1.27'). Defaults: top/bottom 1.91 (Word Moderate), left/right 1.27 (Word Narrow). Empty string keeps defaults."
+    description: "Page margins in cm as 'top,bottom,left,right' (e.g. '2.54,2.54,2.0,2.0'). Default: top/bottom 2.54, left/right 2.0. Empty string keeps defaults."
     type: string
     required: false
 tools: [run_python, file_read, file_write, open_in_session_tab, fdfind, file_copy]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate styled Word documents from markdown files.
-AWS-branded styling: Calibri 11pt, AWS Orange (#FF9900) accents,
+AWS-branded styling: Amazon Ember 11pt, AWS Orange (#FF9900) accents,
 status badges, and clean table formatting.
 
 Usage:
@@ -89,18 +89,26 @@ def set_paragraph_spacing(paragraph, before=None, after=None, line=None):
 
 
 def set_table_full_width(tbl):
-    """Set table to fill page width with proper cell margins."""
+    """Set table to fill page width with proper cell margins.
+
+    Forces fixed layout so a long cell value can't blow the table past the
+    page margin. Also disables row no-wrap and tells cells to break long
+    tokens so URLs and code stay inside the column.
+    """
     tblPr = tbl._tbl.find(qn('w:tblPr'))
     if tblPr is None:
         tblPr = parse_xml(f'<w:tblPr {nsdecls("w")}/>')
         tbl._tbl.insert(0, tblPr)
-    # Width 100%
-    for tag in ('w:tblW', 'w:tblCellMar'):
+    # Replace existing width/layout/margin specs
+    for tag in ('w:tblW', 'w:tblCellMar', 'w:tblLayout'):
         existing = tblPr.find(qn(tag))
         if existing is not None:
             tblPr.remove(existing)
     tblPr.append(parse_xml(
         f'<w:tblW {nsdecls("w")} w:type="pct" w:w="5000"/>'
+    ))
+    tblPr.append(parse_xml(
+        f'<w:tblLayout {nsdecls("w")} w:type="fixed"/>'
     ))
     tblPr.append(parse_xml(
         f'<w:tblCellMar {nsdecls("w")}>'
@@ -110,6 +118,18 @@ def set_table_full_width(tbl):
         f'<w:right w:w="120" w:type="dxa"/>'
         f'</w:tblCellMar>'
     ))
+    # Per-row: disable cantSplit/noWrap; per-cell: ensure tcW set + allow wrap
+    for row in tbl.rows:
+        trPr = row._tr.find(qn('w:trPr'))
+        if trPr is not None:
+            for child in list(trPr):
+                if child.tag in (qn('w:cantSplit'), qn('w:noWrap')):
+                    trPr.remove(child)
+        for cell in row.cells:
+            tcPr = cell._element.get_or_add_tcPr()
+            # Remove any noWrap inside the cell — long tokens must wrap
+            for nw in tcPr.findall(qn('w:noWrap')):
+                tcPr.remove(nw)
 
 
 # -- Inline markdown rendering ------------------------------------------------
@@ -134,14 +154,14 @@ def add_formatted_text(paragraph, text, base_size=11, base_bold=False,
 
         if m.group(1):  # **bold**
             r = paragraph.add_run(m.group(2))
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(base_size)
             r.font.bold = True
             r.font.italic = base_italic
             r.font.color.rgb = base_color
         elif m.group(3):  # *italic*
             r = paragraph.add_run(m.group(4))
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(base_size)
             r.font.italic = True
             r.font.color.rgb = base_color
@@ -157,7 +177,7 @@ def add_formatted_text(paragraph, text, base_size=11, base_bold=False,
             add_hyperlink(paragraph, link_text, link_url, font_size=base_size)
         elif m.group(10):  # ^N footnote reference
             r = paragraph.add_run(m.group(11))
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(max(base_size - 2, 7))
             r.font.color.rgb = base_color
             r.font.superscript = True
@@ -170,14 +190,14 @@ def add_formatted_text(paragraph, text, base_size=11, base_bold=False,
 
 def _plain_run(paragraph, text, size, bold, color, italic=False):
     r = paragraph.add_run(text)
-    r.font.name = "Calibri"
+    r.font.name = "Amazon Ember"
     r.font.size = Pt(size)
     r.font.bold = bold
     r.font.italic = italic
     r.font.color.rgb = color
 
 
-def add_hyperlink(paragraph, text, url, font_name="Calibri", font_size=11):
+def add_hyperlink(paragraph, text, url, font_name="Amazon Ember", font_size=11):
     """Add a clickable hyperlink to a paragraph."""
     from xml.sax.saxutils import escape as xml_escape
     from docx.opc.constants import RELATIONSHIP_TYPE as RT
@@ -210,7 +230,7 @@ def add_hyperlink(paragraph, text, url, font_name="Calibri", font_size=11):
 def add_badge(paragraph, label, bg_color):
     """Insert a small coloured badge (pill) inline."""
     r = paragraph.add_run(f"  {label}  ")
-    r.font.name = "Calibri"
+    r.font.name = "Amazon Ember"
     r.font.size = Pt(8)
     r.font.bold = True
     r.font.color.rgb = WHITE
@@ -246,7 +266,7 @@ PRIORITY_BADGE = {
 
 # -- Document builder ---------------------------------------------------------
 
-DEFAULT_MARGINS_CM = {"top": 1.91, "bottom": 1.91, "left": 1.27, "right": 1.27}
+DEFAULT_MARGINS_CM = {"top": 2.54, "bottom": 2.54, "left": 2.0, "right": 2.0}
 
 
 class StyledDocxBuilder:
@@ -262,7 +282,7 @@ class StyledDocxBuilder:
 
     def _setup_styles(self):
         style = self.doc.styles["Normal"]
-        style.font.name = "Calibri"
+        style.font.name = "Amazon Ember"
         style.font.size = Pt(11)
         style.font.color.rgb = DARK_GRAY
         pf = style.paragraph_format
@@ -276,11 +296,11 @@ class StyledDocxBuilder:
             section.right_margin = Cm(self.margins["right"])
 
         sizes = {1: 22, 2: 15, 3: 12}
-        befores = {1: 0, 2: 18, 3: 12}
+        befores = {1: 12, 2: 18, 3: 12}  # H1 gets 12pt so the title doesn't hug the top margin
         afters = {1: 6, 2: 6, 3: 4}
         for lvl in (1, 2, 3):
             hs = self.doc.styles[f"Heading {lvl}"]
-            hs.font.name = "Calibri"
+            hs.font.name = "Amazon Ember"
             hs.font.size = Pt(sizes[lvl])
             hs.font.bold = True
             hs.font.color.rgb = DARK_GRAY
@@ -291,7 +311,9 @@ class StyledDocxBuilder:
 
     def build(self, md_path, out_path):
         with open(md_path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
+            raw = f.read()
+        raw = self._preprocess_html(raw)
+        lines = raw.splitlines()
         self.footnotes, self.extra_notes, skip_lines = self._extract_footnotes(lines)
         i = 0
         in_code_block = False
@@ -418,7 +440,7 @@ class StyledDocxBuilder:
                 p = self.doc.add_paragraph()
                 set_paragraph_spacing(p, before=0, after=2)
                 r = p.add_run(f"{meta_m.group(1)}: ")
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(10)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
@@ -443,6 +465,51 @@ class StyledDocxBuilder:
         self._add_footer()
         self.doc.save(out_path)
         print(f"  -> {out_path}")
+
+    def _preprocess_html(self, text):
+        """Convert common GitHub-README HTML to markdown equivalents and strip the rest.
+
+        - <a href="URL">TEXT</a>           → [TEXT](URL)
+        - <strong>X</strong>, <b>X</b>     → **X**
+        - <h1>...</h1> .. <h6>...</h6>     → # X .. ###### X (align attr ignored)
+        - <img ...>                        → removed (badges, logos)
+        - <details>, </details>            → removed (wrapper only)
+        - <summary>X</summary>             → **X** (acts as a heading-ish label)
+        - <p>, </p>, <sub>, </sub>, <br>   → removed/whitespace
+        Other tags are stripped but content is preserved.
+        """
+        # Strip <img ...> entirely (self-closing or not)
+        text = re.sub(r"<img\b[^>]*/?>", "", text, flags=re.IGNORECASE)
+        # <a href="URL">TEXT</a> → [TEXT](URL)
+        text = re.sub(
+            r'<a\b[^>]*\bhref="([^"]+)"[^>]*>(.*?)</a>',
+            r"[\2](\1)",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        # <strong>X</strong>, <b>X</b> → **X**
+        text = re.sub(r"<(strong|b)\b[^>]*>(.*?)</\1>", r"**\2**", text, flags=re.IGNORECASE | re.DOTALL)
+        # <hN>X</hN> → markdown heading
+        for n in range(1, 7):
+            text = re.sub(
+                rf"<h{n}\b[^>]*>(.*?)</h{n}>",
+                lambda m, n=n: f"\n{'#' * n} {m.group(1).strip()}\n",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+        # <summary>X</summary> → **X** on its own line (collapsible section heading)
+        text = re.sub(
+            r"<summary\b[^>]*>(.*?)</summary>",
+            lambda m: f"\n**{m.group(1).strip()}**\n",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        # <br> / <br/> → newline
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        # Drop wrapper-only tags entirely (open and close)
+        for tag in ("details", "p", "sub", "sup", "div", "span", "center"):
+            text = re.sub(rf"</?{tag}\b[^>]*>", "", text, flags=re.IGNORECASE)
+        return text
 
     def _extract_footnotes(self, lines):
         """Scan for '**Notes:**' / 'Notes:' sections and extract footnote defs.
@@ -512,7 +579,7 @@ class StyledDocxBuilder:
             p = self.doc.add_paragraph()
             set_paragraph_spacing(p, before=1, after=1)
             r = p.add_run(str(n))
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(8)
             r.font.superscript = True
             r.font.color.rgb = gray
@@ -524,7 +591,7 @@ class StyledDocxBuilder:
             p = self.doc.add_paragraph()
             set_paragraph_spacing(p, before=1, after=1)
             r = p.add_run("  •  ")
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(9)
             r.font.color.rgb = gray
             add_formatted_text(p, note, base_size=9,
@@ -559,7 +626,7 @@ class StyledDocxBuilder:
                 first = False
                 title = "Key Takeaways" if self.lang == "en" else "핵심 요약"
                 r = p.add_run(title)
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(13)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
@@ -571,7 +638,7 @@ class StyledDocxBuilder:
                 p = cell.add_paragraph()
                 first = False
                 r = p.add_run("  \u2022  ")
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(11)
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
                 r.font.bold = True
@@ -637,12 +704,29 @@ class StyledDocxBuilder:
             r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
             set_paragraph_spacing(p, before=2, after=0)
 
+        # Pick a font size that keeps the longest line inside the page width.
+        # Consolas at 9pt ≈ 1.95 mm per char; usable width = pageWidth - L/R margins.
+        section = self.doc.sections[0]
+        usable_cm = (section.page_width - section.left_margin - section.right_margin) / 360000
+        max_cols = max((len(line) for line in code_lines), default=0)
+        # Empirical char widths in cm for Consolas at given pt
+        char_cm = {9: 0.195, 8: 0.173, 7: 0.152, 6: 0.130}
+        code_pt = 9
+        # Account for cell padding (~0.4cm each side) and a small safety margin
+        budget = max(usable_cm - 0.9, 6.0)
+        for pt in (9, 8, 7, 6):
+            if max_cols * char_cm[pt] <= budget:
+                code_pt = pt
+                break
+        else:
+            code_pt = 6  # very long lines — fall back to smallest
+
         for line in code_lines:
             p = cell.paragraphs[0] if first else cell.add_paragraph()
             first = False
             r = p.add_run(line if line else " ")
             r.font.name = "Consolas"
-            r.font.size = Pt(9)
+            r.font.size = Pt(code_pt)
             r.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
             set_paragraph_spacing(p, before=0, after=0)
 
@@ -718,7 +802,7 @@ class StyledDocxBuilder:
                 p = self.doc.add_paragraph()
                 set_paragraph_spacing(p, before=2, after=2)
                 r = p.add_run(f"{nm.group(1)}.  ")
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(11)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
@@ -729,7 +813,7 @@ class StyledDocxBuilder:
                 set_paragraph_spacing(p, before=1, after=1)
                 p.paragraph_format.left_indent = Cm(1.2)
                 r = p.add_run("\u2022  ")
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(10)
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
                 add_formatted_text(p, item.strip()[2:], base_size=10)
@@ -749,7 +833,7 @@ class StyledDocxBuilder:
 
             bullet_char = "\u2022" if indent_level == 0 else "\u25E6"
             r = p.add_run(f"  {bullet_char}  ")
-            r.font.name = "Calibri"
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(11)
             if indent_level == 0:
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
@@ -791,7 +875,7 @@ class StyledDocxBuilder:
                 label = line[:colon_idx + 1]
                 value = line[colon_idx + 1:].strip()
                 r = p.add_run(label + " ")
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(8)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
@@ -799,7 +883,7 @@ class StyledDocxBuilder:
                                    base_color=RGBColor(0x99, 0x99, 0x99))
             else:
                 r = p.add_run(line)
-                r.font.name = "Calibri"
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(8)
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -827,10 +911,10 @@ class StyledDocxBuilder:
             txt = self.footer_text
         else:
             today = date.today().isoformat()
-            txt = f"Generated from Markdown  |  {today}  |  Confidential"
+            txt = f"{today}  |  Confidential"
 
         r = fp.add_run(txt)
-        r.font.name = "Calibri"
+        r.font.name = "Amazon Ember"
         r.font.size = Pt(8)
         r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
