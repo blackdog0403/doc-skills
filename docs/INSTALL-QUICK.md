@@ -4,8 +4,10 @@
 
 ### What You'll Need
 
-- Amazon Quick Desktop installed and signed in
+- Amazon Quick Desktop installed and signed in (Mac or Windows)
 - The skill ZIP file (download from [Releases](../../releases))
+
+> ✅ **No Python, terminal, or extra tools required.** Quick Desktop bundles its own Python runtime with `python-docx` and `python-pptx` pre-installed. Mac and Windows behave identically.
 
 ### Installation via Quick Desktop UI
 
@@ -79,8 +81,10 @@ If you prefer manual installation or the UI import isn't available:
 
 ### 준비물
 
-- Amazon Quick Desktop 설치 및 로그인 완료
+- Amazon Quick Desktop 설치 및 로그인 완료 (Mac / Windows 모두 가능)
 - 스킬 ZIP 파일 ([Releases](../../releases)에서 다운로드)
+
+> ✅ **Python·터미널·기타 도구 설치 필요 없습니다.** Quick Desktop이 Python 런타임과 `python-docx`, `python-pptx`를 샌드박스에 미리 내장하고 있습니다. Mac과 Windows 동일하게 작동합니다.
 
 ### Quick Desktop UI로 설치하기
 
