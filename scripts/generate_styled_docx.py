@@ -246,11 +246,15 @@ PRIORITY_BADGE = {
 
 # -- Document builder ---------------------------------------------------------
 
+DEFAULT_MARGINS_CM = {"top": 1.91, "bottom": 1.91, "left": 1.27, "right": 1.27}
+
+
 class StyledDocxBuilder:
-    def __init__(self, lang="en", footer_text=None):
+    def __init__(self, lang="en", footer_text=None, margins=None):
         self.doc = Document()
         self.lang = lang
         self.footer_text = footer_text
+        self.margins = {**DEFAULT_MARGINS_CM, **(margins or {})}
         self.badge_rules = BADGE_RULES_EN if lang == "en" else BADGE_RULES_KO
         self.footnotes = {}
         self.extra_notes = []
@@ -266,10 +270,10 @@ class StyledDocxBuilder:
         pf.line_spacing = 1.15
 
         for section in self.doc.sections:
-            section.top_margin = Cm(2.54)
-            section.bottom_margin = Cm(2.54)
-            section.left_margin = Cm(2.54)
-            section.right_margin = Cm(2.54)
+            section.top_margin = Cm(self.margins["top"])
+            section.bottom_margin = Cm(self.margins["bottom"])
+            section.left_margin = Cm(self.margins["left"])
+            section.right_margin = Cm(self.margins["right"])
 
         sizes = {1: 22, 2: 15, 3: 12}
         befores = {1: 0, 2: 18, 3: 12}
@@ -851,12 +855,27 @@ def main():
                         help="Language for badge rules and labels (default: auto-detect from filename)")
     parser.add_argument("--footer", default=None,
                         help="Custom footer text (default: auto-generated with date)")
+    parser.add_argument("--margin-top", type=float, default=DEFAULT_MARGINS_CM["top"],
+                        help=f"Top margin in cm (default: {DEFAULT_MARGINS_CM['top']})")
+    parser.add_argument("--margin-bottom", type=float, default=DEFAULT_MARGINS_CM["bottom"],
+                        help=f"Bottom margin in cm (default: {DEFAULT_MARGINS_CM['bottom']})")
+    parser.add_argument("--margin-left", type=float, default=DEFAULT_MARGINS_CM["left"],
+                        help=f"Left margin in cm (default: {DEFAULT_MARGINS_CM['left']})")
+    parser.add_argument("--margin-right", type=float, default=DEFAULT_MARGINS_CM["right"],
+                        help=f"Right margin in cm (default: {DEFAULT_MARGINS_CM['right']})")
 
     args = parser.parse_args()
 
     if args.output and len(args.input) > 1:
         print("Error: -o/--output can only be used with a single input file.", file=sys.stderr)
         sys.exit(1)
+
+    margins = {
+        "top": args.margin_top,
+        "bottom": args.margin_bottom,
+        "left": args.margin_left,
+        "right": args.margin_right,
+    }
 
     for md_path in args.input:
         if not os.path.isfile(md_path):
@@ -867,7 +886,7 @@ def main():
         lang = args.lang if args.lang else detect_lang(md_path)
 
         print(f"Generating styled Word document (lang={lang})...")
-        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer)
+        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer, margins=margins)
         builder.build(md_path, out_path)
 
     print("Done!")

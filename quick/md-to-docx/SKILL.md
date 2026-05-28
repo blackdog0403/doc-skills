@@ -22,6 +22,10 @@ inputs:
     description: "Custom footer text. Default: auto-generated with today's date."
     type: string
     required: false
+  - name: margins
+    description: "Page margins in cm as 'top,bottom,left,right' (e.g. '1.91,1.91,1.27,1.27'). Defaults: top/bottom 1.91 (Word Moderate), left/right 1.27 (Word Narrow). Empty string keeps defaults."
+    type: string
+    required: false
 tools: [run_python, file_read, file_write, open_in_session_tab, fdfind, file_copy]
 ---
 
@@ -59,6 +63,7 @@ file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
 language = "{{language}}"  # "en", "ko", or "auto"
 footer = "{{footer}}"  # may be empty
+margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
 
 # Locate generate_styled_docx.py: prefer the skill bundle (ZIP install),
 # fall back to ~/.local/bin/ (developer install via setup/install-cli.sh)
@@ -81,6 +86,11 @@ if language and language != "auto":
     cmd.extend(["-l", language])
 if footer:
     cmd.extend(["--footer", footer])
+if margins:
+    parts = [p.strip() for p in margins.split(",")]
+    if len(parts) == 4:
+        t, b, l, r = parts
+        cmd.extend(["--margin-top", t, "--margin-bottom", b, "--margin-left", l, "--margin-right", r])
 
 result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(file_path) or ".")
 print(result.stdout)

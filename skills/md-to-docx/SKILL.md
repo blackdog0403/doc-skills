@@ -49,6 +49,7 @@ Map options to CLI flags:
 - `output:<path>` → `-o <path>`
 - `lang:en` or `lang:ko` → `-l en` or `-l ko`
 - `footer:<text>` → `--footer "<text>"`
+- `margin:<top,bottom,left,right>` (cm) → `--margin-top <t> --margin-bottom <b> --margin-left <l> --margin-right <r>`
 
 If no language is specified, the script auto-detects from filename (`-ko.md` → Korean, otherwise English).
 
@@ -56,6 +57,7 @@ If no language is specified, the script auto-detects from filename (`-ko.md` →
 - `-o` / `--output`: Output .docx file path (default: same name as input with .docx extension)
 - `-l` / `--lang`: Language for badge rules and labels — `en` or `ko` (default: auto-detect)
 - `--footer`: Custom footer text (default: auto-generated with today's date)
+- `--margin-top`, `--margin-bottom`, `--margin-left`, `--margin-right`: Page margins in cm. Defaults: top/bottom 1.91 (Word "Moderate"), left/right 1.27 (Word "Narrow")
 
 ### Styling Features
 - **AWS-branded**: Calibri 11pt font, AWS Orange (#FF9900) accents
