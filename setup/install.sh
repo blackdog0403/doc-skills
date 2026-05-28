@@ -110,51 +110,51 @@ preflight_check() {
         local pyminor=$(echo "$pyver" | cut -d. -f2)
         if [ "$pymajor" -ge 3 ] && [ "$pyminor" -ge 10 ]; then
             echo -e "  ${CHECK} Python ${pyver} (≥3.10 required)"
-            ((pass++))
+            pass=$((pass+1))
         else
             echo -e "  ${CROSS} Python ${pyver} — need 3.10+"
-            ((fail++))
+            fail=$((fail+1))
         fi
     else
         echo -e "  ${CROSS} Python not found"
-        ((fail++))
+        fail=$((fail+1))
     fi
     
     # Git
     if command -v git &>/dev/null; then
         local gitver=$(git --version | awk '{print $3}')
         echo -e "  ${CHECK} Git ${gitver}"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${CROSS} Git not found"
-        ((fail++))
+        fail=$((fail+1))
     fi
     
     # python-docx
     if python3 -c "import docx" 2>/dev/null; then
         local docxver=$(python3 -c "import docx; print(docx.__version__)" 2>/dev/null || echo "?")
         echo -e "  ${CHECK} python-docx ${docxver}"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${WARN} python-docx not installed ${DIM}(needed for md-to-docx CLI)${NC}"
-        ((warnings++))
+        warnings=$((warnings+1))
     fi
     
     # python-pptx
     if python3 -c "import pptx" 2>/dev/null; then
         local pptxver=$(python3 -c "import pptx; print(pptx.__version__)" 2>/dev/null || echo "?")
         echo -e "  ${CHECK} python-pptx ${pptxver}"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${WARN} python-pptx not installed ${DIM}(needed for translate-pptx CLI)${NC}"
-        ((warnings++))
+        warnings=$((warnings+1))
     fi
     
     # boto3
     if python3 -c "import boto3" 2>/dev/null; then
         local b3ver=$(python3 -c "import boto3; print(boto3.__version__)" 2>/dev/null || echo "?")
         echo -e "  ${CHECK} boto3 ${b3ver} ${DIM}(translate CLI)${NC}"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${BULLET} boto3 not installed ${DIM}(optional — only for translate CLI)${NC}"
     fi
@@ -162,7 +162,7 @@ preflight_check() {
     # AWS credentials
     if aws sts get-caller-identity &>/dev/null 2>&1; then
         echo -e "  ${CHECK} AWS credentials active"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${BULLET} AWS credentials not configured ${DIM}(optional — only for translate CLI)${NC}"
     fi
@@ -170,7 +170,7 @@ preflight_check() {
     # Kiro
     if [ -d "$HOME/.kiro" ]; then
         echo -e "  ${CHECK} Kiro detected (~/.kiro/)"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${BULLET} Kiro not detected ${DIM}(will create ~/.kiro/skills/)${NC}"
     fi
@@ -178,7 +178,7 @@ preflight_check() {
     # Claude Code
     if [ -d "$HOME/.claude" ]; then
         echo -e "  ${CHECK} Claude Code detected (~/.claude/)"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${BULLET} Claude Code not detected ${DIM}(will create ~/.claude/skills/)${NC}"
     fi
@@ -186,7 +186,7 @@ preflight_check() {
     # Amazon Quick Desktop
     if [ -d "$HOME/.quickwork" ]; then
         echo -e "  ${CHECK} Amazon Quick Desktop detected"
-        ((pass++))
+        pass=$((pass+1))
     else
         echo -e "  ${BULLET} Amazon Quick Desktop not detected"
     fi
@@ -243,7 +243,7 @@ install_slash() {
     local current=0
     
     for skill_dir in "${skills[@]}"; do
-        ((current++))
+        current=$((current+1))
         local name=$(basename "$skill_dir")
         
         # Kiro
@@ -271,7 +271,7 @@ install_quick() {
     local current=0
     
     for skill_dir in "${skills[@]}"; do
-        ((current++))
+        current=$((current+1))
         local name=$(basename "$skill_dir")
         
         create_symlink "$skill_dir" "$QUICK_SKILLS/$name" "$name"
@@ -330,26 +330,26 @@ verify_install() {
     local fail=0
     
     if [ "$INSTALL_SLASH" = true ]; then
-        for skill in doc-fact-check md-to-docx translate-pptx; do
+        for skill in doc-fact-check md-to-docx translate-pptx stop-slop; do
             if [ -L "$KIRO_SKILLS/$skill" ] && [ -e "$KIRO_SKILLS/$skill/SKILL.md" ]; then
-                ((pass++))
+                pass=$((pass+1))
             else
-                echo -e "  ${CROSS} Kiro: /$skill missing"; ((fail++))
+                echo -e "  ${CROSS} Kiro: /$skill missing"; fail=$((fail+1))
             fi
             if [ -L "$CLAUDE_SKILLS/$skill" ] && [ -e "$CLAUDE_SKILLS/$skill/SKILL.md" ]; then
-                ((pass++))
+                pass=$((pass+1))
             else
-                echo -e "  ${CROSS} Claude: /$skill missing"; ((fail++))
+                echo -e "  ${CROSS} Claude: /$skill missing"; fail=$((fail+1))
             fi
         done
     fi
     
     if [ "$INSTALL_QUICK" = true ]; then
-        for skill in doc-fact-check md-to-docx translate-pptx; do
+        for skill in doc-fact-check md-to-docx translate-pptx stop-slop; do
             if [ -L "$QUICK_SKILLS/$skill" ] && [ -e "$QUICK_SKILLS/$skill/SKILL.md" ]; then
-                ((pass++))
+                pass=$((pass+1))
             else
-                echo -e "  ${CROSS} Quick: $skill missing"; ((fail++))
+                echo -e "  ${CROSS} Quick: $skill missing"; fail=$((fail+1))
             fi
         done
     fi
@@ -357,9 +357,9 @@ verify_install() {
     if [ "$INSTALL_CLI" = true ]; then
         for script in translate_pptx.py generate_styled_docx.py; do
             if [ -L "$BIN_DIR/$script" ] && [ -e "$BIN_DIR/$script" ]; then
-                ((pass++))
+                pass=$((pass+1))
             else
-                echo -e "  ${CROSS} CLI: $script missing"; ((fail++))
+                echo -e "  ${CROSS} CLI: $script missing"; fail=$((fail+1))
             fi
         done
     fi

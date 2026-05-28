@@ -55,7 +55,15 @@ mkdir -p "$MDOCX_SCRIPTS"
 ln -sf "$SCRIPTS_DIR/generate_styled_docx.py" "$MDOCX_SCRIPTS/generate_styled_docx.py" 2>/dev/null || true
 echo "   ✅ md-to-docx/scripts/generate_styled_docx.py"
 
+# stop-slop needs references/ from skills/ (single source of truth)
+STOPSLOP_REFS="$QUICK_DIR/stop-slop/references"
+if [ ! -L "$STOPSLOP_REFS" ]; then
+    [ -d "$STOPSLOP_REFS" ] && rm -rf "$STOPSLOP_REFS"
+    ln -sf "$REPO_ROOT/skills/stop-slop/references" "$STOPSLOP_REFS"
+fi
+echo "   ✅ stop-slop/references/ (→ skills/stop-slop/references/)"
+
 echo ""
 echo "✅ Done! Skills registered at: $QUICK_SKILLS"
 echo ""
-echo "Verify: ls -la $QUICK_SKILLS/{doc-fact-check,md-to-docx,translate-pptx}"
+echo "Verify: ls -la $QUICK_SKILLS/{doc-fact-check,md-to-docx,translate-pptx,stop-slop}"

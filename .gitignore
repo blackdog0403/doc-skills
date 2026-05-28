@@ -24,3 +24,7 @@ Thumbs.db
 # Temp
 tmp/
 *.tmp
+
+# Install-time symlinks (created by setup/link-quick.sh; absolute paths, environment-specific)
+quick/md-to-docx/scripts/
+quick/translate-pptx/scripts/
