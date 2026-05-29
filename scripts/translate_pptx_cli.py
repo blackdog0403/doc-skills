@@ -11,9 +11,12 @@ Key design decisions:
 - Retry logic for API failures
 """
 
-import json, re, sys, time, argparse
+import json
+import re
+import sys
+import time
+import argparse
 from pptx import Presentation
-from pptx.util import Pt
 import boto3
 
 # ── Config ──
@@ -168,7 +171,7 @@ def normalize_fonts(prs):
     # 3) Patch docProps/app.xml (font list in package)
     try:
         from pptx.opc.constants import RELATIONSHIP_TYPE as RT
-        app_part = prs.part.package.part_related_by(RT.CORE_PROPERTIES)
+        _app_part = prs.part.package.part_related_by(RT.CORE_PROPERTIES)
     except Exception:
         pass  # not critical
 
@@ -469,7 +472,7 @@ def dry_run(prs, slide_indices=None, include_notes=True):
     api_calls = (total_paras + BATCH_SIZE - 1) // BATCH_SIZE if total_paras else 0
 
     print(f"{'='*60}")
-    print(f"📊 Dry Run — Translation Preview")
+    print("📊 Dry Run — Translation Preview")
     print(f"{'='*60}")
     print(f"   📄 Slides to process:  {len(list(indices))}")
     print(f"   📝 Slides with content: {slides_with_content}")
@@ -605,7 +608,7 @@ def main():
         print("📝 Generating presentation summary...")
         summary = summarize_presentation(prs, args.model, slide_indices)
         print(summary)
-        print(f"\n✅ Summary complete")
+        print("\n✅ Summary complete")
         return
 
     # ── Translate ──
@@ -660,7 +663,7 @@ def main():
             report_count = save_review_report(prs_orig, prs, args.report, slide_indices)
             print(f"\n📄 Review report saved: {args.report} ({report_count} slides compared)")
         elif args.report:
-            print(f"\n⚠  --original required for comparison report (provide original PPTX path)")
+            print("\n⚠  --original required for comparison report (provide original PPTX path)")
 
     # ── Fonts only ──
     if args.mode in ('fonts', 'all'):
@@ -679,7 +682,7 @@ def main():
         remaining = review_pass(prs, None, include_notes)
         elapsed = time.time() - start_time
         print(f"\n{'='*60}")
-        print(f"📊 Translation Summary")
+        print("📊 Translation Summary")
         print(f"{'='*60}")
         print(f"   ⏱  Time: {elapsed:.0f}s")
         if TOTAL_INPUT_TOKENS or TOTAL_OUTPUT_TOKENS:
@@ -704,7 +707,8 @@ def main():
         print(f"\n💾 Saving to {output}...")
         prs.save(output)
 
-        import zipfile, shutil
+        import zipfile
+        import shutil
         tmp_path = output + '.tmp'
         with zipfile.ZipFile(output, 'r') as zin, zipfile.ZipFile(tmp_path, 'w') as zout:
             for item in zin.infolist():
@@ -716,9 +720,9 @@ def main():
                     data = text.encode('utf-8')
                 zout.writestr(item, data)
         shutil.move(tmp_path, output)
-        print(f"✅ Done!")
+        print("✅ Done!")
     else:
-        print(f"\n✅ Review complete (no changes saved)")
+        print("\n✅ Review complete (no changes saved)")
 
 
 if __name__ == '__main__':

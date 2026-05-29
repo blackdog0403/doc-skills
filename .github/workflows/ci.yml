@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff bandit pip-audit
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check scripts/
+
+      - name: Security scan (bandit)
+        # -ll: report MEDIUM+ severity, MEDIUM+ confidence (skip low-signal noise)
+        # Excludes test scaffolding under scripts/tests/
+        run: bandit -r scripts/ -x scripts/tests -ll
+
+      - name: Dependency vulnerability scan (pip-audit)
+        # Scoped to declared project deps so the runner's pip/setuptools
+        # versions don't fail the build on unrelated CVEs.
+        run: pip-audit -r requirements.txt --strict
