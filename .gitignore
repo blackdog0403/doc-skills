@@ -30,3 +30,7 @@ dist/
 # Install-time symlinks (created by setup/link-quick.sh; absolute paths, environment-specific)
 quick/md-to-docx/scripts/
 quick/translate-pptx/scripts/
+
+# Skills under private development — not ready to publish
+skills/inception-studio/
+quick/inception-studio/
