@@ -25,6 +25,7 @@ A unified skill repository that lets you write AI agent instructions once and de
 ## Table of Contents
 
 - [🟢 Install via Quick Desktop UI](#-install-via-quick-desktop-ui)
+- [💬 Using Skills (Quick Desktop)](#-using-skills-quick-desktop)
 - [⚡ Quick Start (Developers)](#-quick-start-developers)
 - [📦 Skills](#-skills)
 - [🏗 Architecture](#-architecture)
@@ -56,6 +57,30 @@ No git, no terminal, no Python install. Import a ZIP through the app's UI.
 📖 Step-by-step screenshots and Korean guide: [docs/INSTALL-QUICK.md](docs/INSTALL-QUICK.md)
 
 > ℹ️ Using Kiro or Claude Code? Want auto-updates via `git pull`? See [Quick Start (Developers)](#-quick-start-developers) below.
+
+---
+
+## 💬 Using Skills (Quick Desktop)
+
+Once installed, that's it. **Just type a natural-language request in any new conversation** and Quick automatically matches the right skill and runs it — there's no step to pre-select or attach a skill.
+
+**How this differs from a chat agent:**
+
+| | Chat agent | Skill |
+|---|---|---|
+| **How you use it** | Pick a specific agent first → chat in that persona | Ask in plain language in any conversation → Quick matches the right skill |
+| **Analogy** | "Let me ask this expert" | "Just do this for me" → Quick reaches for the right tool |
+
+Open a new conversation and type:
+
+```
+> fact check this document      → runs doc-fact-check
+> stop slop this draft          → runs stop-slop
+> convert this markdown to docx  → runs md-to-docx
+> translate this pptx           → runs translate-pptx
+```
+
+> 💡 For skills that work on files, **attach the file** to the conversation or drop it in a folder Quick can access.
 
 ---
 

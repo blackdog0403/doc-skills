@@ -25,6 +25,7 @@ AI 에이전트 지시문을 한 번 작성해 Kiro · Claude Code · Amazon Qui
 ## 목차
 
 - [🟢 Quick Desktop UI로 설치](#-quick-desktop-ui로-설치)
+- [💬 스킬 사용하기 (Quick Desktop)](#-스킬-사용하기-quick-desktop)
 - [⚡ Quick Start (개발자용)](#-quick-start-개발자용)
 - [📦 스킬 목록](#-스킬-목록)
 - [🏗 아키텍처](#-아키텍처)
@@ -56,6 +57,30 @@ git, 터미널, Python 설치 다 필요 없습니다. 앱 UI에서 ZIP을 임�
 📖 스크린샷 포함 상세 가이드 (영문 + 한국어): [docs/INSTALL-QUICK.md](docs/INSTALL-QUICK.md)
 
 > ℹ️ Kiro · Claude Code 사용자거나 `git pull` 자동 업데이트가 필요하면 아래 [Quick Start (개발자용)](#-quick-start-개발자용)로.
+
+---
+
+## 💬 스킬 사용하기 (Quick Desktop)
+
+설치만 끝나면 됩니다. **새 대화 아무 데서나 자연어로 명령**하면 Quick이 알맞은 스킬을 자동으로 매칭해서 동작합니다. 스킬을 미리 선택하거나 연결하는 과정은 없습니다.
+
+**챗 에이전트와의 차이:**
+
+| | 챗 에이전트 | 스킬 |
+|---|---|---|
+| **사용 방식** | 특정 에이전트를 먼저 선택 → 그 페르소나로 대화 | 아무 대화에서 자연어로 요청 → Quick이 맞는 스킬 자동 매칭 |
+| **비유** | "이 전문가한테 물어볼게" | "이거 해줘" → Quick이 알맞은 도구를 꺼내 씀 |
+
+새 대화를 열고 이렇게 쓰면 됩니다:
+
+```
+> 이 문서 팩트체크해줘      → doc-fact-check 동작
+> AI 티 빼줘               → stop-slop 동작
+> md를 docx로 변환해줘      → md-to-docx 동작
+> pptx 번역해줘            → translate-pptx 동작
+```
+
+> 💡 파일을 다루는 스킬은 대화에 파일을 **첨부**하거나, Quick이 접근 가능한 폴더에 파일을 넣어두면 됩니다.
 
 ---
 
