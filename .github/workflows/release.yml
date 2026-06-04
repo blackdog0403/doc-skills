@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # required for GitHub OIDC -> AWS role assumption (Bedrock)
 
 jobs:
   release:
@@ -26,10 +27,23 @@ jobs:
           chmod +x scripts/build-release.sh
           ./scripts/build-release.sh ${{ steps.version.outputs.VERSION }}
 
+      # Optional: only runs if the repo variable AWS_BEDROCK_ROLE_ARN is set.
+      # Without it (or on failure), release notes fall back to the deterministic changelog.
+      - name: Configure AWS credentials (OIDC)
+        if: vars.AWS_BEDROCK_ROLE_ARN != ''
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_BEDROCK_ROLE_ARN }}
+          aws-region: us-west-2
+
       - name: Generate release notes
+        env:
+          BEDROCK_MODEL_ID: us.anthropic.claude-opus-4-7
+          AWS_REGION: us-west-2
         run: |
-          chmod +x scripts/gen-release-notes.sh
-          ./scripts/gen-release-notes.sh "${{ steps.version.outputs.VERSION }}" > release_notes.md
+          chmod +x scripts/gen-release-notes.sh scripts/ai-release-notes.sh
+          ./scripts/ai-release-notes.sh "${{ steps.version.outputs.VERSION }}" > release_notes.md
           cat << 'EOF' >> release_notes.md
 
           ---
