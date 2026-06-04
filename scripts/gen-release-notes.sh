@@ -7,8 +7,10 @@ set -euo pipefail
 VERSION="${1:?usage: gen-release-notes.sh <version>}"
 TAG="v${VERSION}"
 
-# Previous tag by version order, excluding the tag being released.
-PREV="$(git tag --sort=-version:refname | grep -vFx "$TAG" | head -n1 || true)"
+# Previous *stable* tag by version order (ignore -rc/-beta/-alpha and the tag
+# being released), so a stable release's notes aren't empty when an rc tagged
+# the same commit.
+PREV="$(git tag --sort=-version:refname | grep -vE -- '-(rc|beta|alpha)' | grep -vFx "$TAG" | head -n1 || true)"
 RANGE="HEAD"; [ -n "$PREV" ] && RANGE="${PREV}..HEAD"
 
 SUBJECTS="$(git log --no-merges --pretty='%s' "$RANGE")"
