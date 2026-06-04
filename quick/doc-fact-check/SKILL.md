@@ -42,7 +42,10 @@ Verify factual claims in technical documents against **authoritative sources onl
 8. **Verify before flagging** — Never assert "AWS doesn't publish X" without fetching the page first
 9. **No impact assertions without AWS source** — Never write "no customer impact", "unaffected", or "zero downtime" unless AWS explicitly stated this in a post-event summary. Use factual scope descriptions only.
 10. **No undefined severity labels** — AWS does not publish a severity classification. Terms like "major incident" or "minor event" are subjective and must not be used without explicit definition.
-11. **Qualified language ≠ verified number** — When AWS docs use hedging words ("typically", "usually", "less than", "up to", "in most cases"), the claim is NOT fully verified. It must be flagged as requiring actual testing for the customer's specific environment. These are design-goal statements, not guarantees.
+11. **Qualified language ≠ verified number** — When AWS docs use hedging words ("typically", "usually", "less than", "up to", "in most cases"), the claim is NOT fully verified. It must be flagged as requiring actual testing for the customer's specific environment.
+12. **Negative claims require equal rigor** — Asserting absence ("None", "No events", "Not available") is a factual claim that must be verified with the same effort as asserting presence. "No incidents" is WRONG if a PES exists.
+13. **URL dates are unreliable** — Never infer publication dates from URL paths. Always fetch the page and extract the actual "Posted on" / "Last updated" date.
+14. **Corrections must not create new errors** — After fixing a claim, verify the fix is consistent with surrounding context (table headers, other tables, summary sections).
 
 ## Source Hierarchy (Trustworthiness)
 
@@ -53,13 +56,56 @@ Verify factual claims in technical documents against **authoritative sources onl
 | **Tier 1 (Use)** | AWS blog posts (aws.amazon.com/blogs/) | ✅ Cite directly |
 | **Tier 1 (Use)** | AWS press releases (press.aboutamazon.com) | ✅ Cite directly |
 | **Tier 1 (Use)** | AWS service pages (aws.amazon.com/{service}/) | ✅ Cite directly |
+| **Tier 1 (Use)** | AWS Post-Event Summaries (aws.amazon.com/premiumsupport/technology/pes/) | ✅ Authoritative incident source |
 | **Tier 2 (Acceptable)** | Customer's own measurements (first-party data) | ✅ Note source + date |
 | **Tier 2 (Acceptable)** | Organization's internal wiki/tools | ✅ For internal docs only |
 | **Tier 3 (Flag)** | Third-party monitoring tools (Economize, IsDown, CloudPing, aws-services.info) | ⚠️ Flag |
 | **Tier 3 (Flag)** | Community posts, re:Post user answers | ⚠️ Flag |
 | **Tier 4 (Remove)** | Unattributed claims, "it is known that..." | ❌ Remove/rewrite |
 
-## Qualified Language Rule (NEW in v6)
+## Negative Claim Verification Rule (NEW in v7)
+
+**Problem:** Documents often assert absence — "No outages", "None reported", "Not available", "No events in last 12 months." These negative claims are just as likely to be wrong as positive claims, but are psychologically easier to skip verification on.
+
+**Rule:** Any negative claim ("None", "No", "Not", "0 events", "Never") MUST be actively verified. The burden of proof for "nothing happened" is the same as "something happened."
+
+**Mandatory verification for negative incident claims:**
+1. Fetch the AWS Post-Event Summaries page: `url_fetch("https://aws.amazon.com/premiumsupport/technology/pes/")`
+2. Search for the region name in the PES list
+3. If ANY PES exists for that region → the "None" claim is ❌ INCORRECT
+4. Additionally: `web_search("[region name] outage post-event summary site:aws.amazon.com")`
+
+**Mandatory verification for negative availability claims ("Not available", "❌"):**
+1. `web_search("[service name] [region name] site:aws.amazon.com/about-aws/whats-new")`
+2. Check the Regional Services List
+3. If service IS available → the "❌" claim is INCORRECT
+
+**Why this matters:** Asserting "no incidents" when incidents DID occur is worse than missing a positive claim — it misleads the reader into false confidence about reliability.
+
+## Cross-Table Consistency Rule (NEW in v7)
+
+**Problem:** Documents often present the same data in multiple places (detail table + summary table + prose). Correcting one location without updating others creates internal contradictions.
+
+**Rule:** After identifying a correction, scan the ENTIRE document for other references to the same data point. All instances must be corrected together.
+
+**Verification steps:**
+1. When a claim is flagged ❌, search the document for ALL occurrences of that value
+2. Check: Does the correction fit the context of each location? (e.g., table header says "last 12 months" but the corrected event is from 7 years ago)
+3. If the correction creates a new inconsistency, flag it and propose a resolution that maintains consistency across ALL locations
+
+## URL Date Verification Rule (NEW in v7)
+
+**Problem:** AWS What's New URL paths often contain a date segment (e.g., `/2026/02/...`) that differs from the actual publication date shown on the page. This happens when posts are created internally then published later.
+
+**Rule:** Never trust URL path dates. Always fetch the page and extract the actual "Posted on" date.
+
+**Verification steps:**
+1. `url_fetch(url, max_chars=2000)` — look for "Posted on:", "Last updated:", or date metadata
+2. Compare extracted date vs. URL path date
+3. If they differ, use the PAGE date (not the URL date)
+4. In the report, note the discrepancy if it affects any claim in the document
+
+## Qualified Language Rule (from v6)
 
 **Problem:** AWS documentation frequently uses hedging language:
 - "typically under 1 second"
@@ -78,11 +124,6 @@ Verify factual claims in technical documents against **authoritative sources onl
 | ⚠️ Unverified | No authoritative source found | General guidance, estimates |
 | ❌ Incorrect | Contradicts authoritative source | Wrong numbers, outdated info |
 
-**For customer-facing documents:**
-- Claims using qualified language get status: **✅ Sourced (qualified) — actual test required**
-- The document must annotate these claims with a note that actual testing is needed
-- In the correction report, these appear in a dedicated section: "Qualified Claims Requiring Validation"
-
 **Qualified language indicators (trigger words):**
 - "typically", "usually", "generally", "in most cases"
 - "less than", "under", "up to", "approximately"
@@ -90,8 +131,8 @@ Verify factual claims in technical documents against **authoritative sources onl
 - Any number followed by "or less", "or more", "or better"
 
 **Fix mode behavior:**
-- When `output_format="fix"`, qualified claims should be rewritten to include: source citation + "actual test required" disclaimer
-- Pattern: `<number> (per AWS docs) — actual test required to confirm for your environment`
+- Preserve the qualifier, cite the source, add "actual test required" disclaimer
+- Pattern: `<number> (per AWS docs: "typically X") — actual test required to confirm for your environment`
 
 ## Workflow
 
@@ -100,12 +141,13 @@ Verify factual claims in technical documents against **authoritative sources onl
 - **Tool**: `file_read` / `file_read_docx` / `file_read_pdf`
 - **Input**: `{{file_path}}`, `{{check_scope}}`
 - **Output**: List of factual claims with locations, filtered by scope
-- Extract all factual claims (numbers, dates, service availability, latency, pricing, AZ counts, instance types, etc.)
+- Extract ALL factual claims — both positive AND negative
 - Categorize: `latency`, `service_availability`, `capacity`, `pricing`, `reliability`, `date/timeline`, `incident`
 - **Range claim splitting:** "0.5-1.5s" → TWO claims: lower bound + upper bound (each needs sourcing)
 - **Scope filtering:** If `{{check_scope}}` ≠ "all", only retain matching category claims
-- **Impact language extraction:** Flag any statement containing impact assertions ("no impact", "unaffected", "zero downtime", "no customer disruption") for verification in Step 3
-- **Qualified language extraction:** Flag any claim containing hedging words (typically, usually, less than, up to, designed to, etc.) for special handling in Step 3
+- **Negative claim extraction:** Flag ALL "None", "No events", "Not available", "❌", "0", "Never" statements as requiring active verification
+- **Impact language extraction:** Flag any statement containing impact assertions
+- **Qualified language extraction:** Flag any claim containing hedging words
 
 ### Step 2: Identify Sources Used
 - **Mode**: `agentic`
@@ -113,17 +155,6 @@ Verify factual claims in technical documents against **authoritative sources onl
 - **Output**: Source classification per claim
 - Classify each cited source against the Source Hierarchy
 - Flag Tier 3/4 sources
-- **Check misleading framing:**
-  - "AWS Network Manager reference data" — NMIP does NOT publish static reference data
-  - "AWS confirmed" without a citation
-  - "per AWS documentation" without a link
-  - Ranges with unsourced upper bounds
-  - **Undefined severity labels:** "major incident", "minor event", "critical outage" without definition
-  - **Impact assertions without source:** "no customer impact", "unaffected", "Multi-AZ architectures were not impacted"
-- **Check qualified language presentation:**
-  - Does the document present "typically <1s" as if it were a guaranteed "<1s"?
-  - Does it strip the hedging word when citing the number?
-  - Does it lack a disclaimer about actual testing needed?
 
 ### Step 3: Verify Against Authoritative Sources + URL Validation
 - **Mode**: `agentic`
@@ -132,63 +163,51 @@ Verify factual claims in technical documents against **authoritative sources onl
 - **Output**: Verification results
 
 **CRITICAL: Always fetch before flagging.**
+**CRITICAL: Verify negative claims with the same rigor as positive claims.**
 
-**Qualified language verification:**
-- Fetch the source page and extract the EXACT wording AWS uses
-- If AWS says "typically under 1 second" and the document says "<1s" → flag as qualified, note the hedging word was stripped
-- If AWS says "typically under 1 second" and the document says "typically under 1 second" → sourced but still qualified (not a hard SLA)
-- **Key question:** Does the document present the number WITH or WITHOUT the qualifier? If without, the document is overstating the claim.
-- **For customer-facing docs:** Even if the qualifier is preserved, add note that actual testing is required for their specific workload/region pair
+#### 3a. Incident History Verification (MANDATORY for any reliability/incident section)
 
-**Instance type verification — search EACH family separately:**
-- `"C8g" "Osaka" site:aws.amazon.com/about-aws/whats-new`
-- `"M8g" "Osaka" site:aws.amazon.com/about-aws/whats-new`
-- `"R8g" "Osaka" site:aws.amazon.com/about-aws/whats-new`
+**Step 1 — Fetch the PES index:**
+```
+url_fetch("https://aws.amazon.com/premiumsupport/technology/pes/", max_chars=10000)
+```
+Extract ALL post-event summaries listed. Note which regions are mentioned.
 
-**SLA verification — fetch the actual SLA page:**
-- `url_fetch("https://aws.amazon.com/s3/sla/")` → extract exact percentage
-- S3 = 99.9%, EC2 Multi-AZ = 99.99%, EKS standard = 99.95%
+**Step 2 — For EACH region in the document's incident table:**
+- If document claims "No events" / "None" → check PES list for ANY entry mentioning that region
+- If PES exists for the region → the "None" claim is ❌ INCORRECT
+- Additionally search: `web_search("[region] outage post-event summary site:aws.amazon.com")`
 
-**Replication latency — fetch service page:**
-- Use `url_fetch` on service page to get exact AWS wording
-- Verify BOTH bounds of range claims
-- **Note whether the source uses qualified language** — if so, mark as "sourced but qualified"
+**Step 3 — For positive incident claims:**
+- Fetch the cited PES URL and verify: correct region, correct date, correct scope description
+- Cross-check the event date against the table's stated time range
 
-**Incident descriptions — factual scope only:**
-- When verifying incident claims, check if the document uses subjective impact language
-- **Correct pattern:** "Single AZ (apne1-az4); Xen instance launches only; 88 min duration. Other AZs were not part of this event per [AWS post-event summary](url)."
-- **Flag this:** "No customer impact" / "Multi-AZ unaffected" / "0 major incidents" — unless AWS explicitly stated this in their post-event summary
-- **Flag undefined severity:** "major" / "minor" labels without definition — AWS has no official severity taxonomy for service events
+#### 3b. Service Availability & Date Verification
 
-**URL validation:**
-- `url_fetch(url, max_chars=500)` on each cited URL
-- Flag broken/empty/redirected URLs
+**Instance type verification — search EACH family separately**
+**Date verification — always fetch the page**
+**SLA verification — fetch the actual SLA page**
+**Negative availability claims — search What's New + Regional Services List**
 
-| Claim Type | Where to Verify | Trap |
-|---|---|---|
-| Service in region | Regional Services List | Changes weekly |
-| Instance in region | EC2 Types by Region + What's New | **Search each family separately** |
-| AZ count | AWS Global Infrastructure | Usable ≠ listed (Tokyo) |
-| Launch date | What's New | Exact date searchable |
-| Latency | AWS does NOT publish hard numbers | Tier 2 only; qualified language common |
-| SLA | SLA pages | **Fetch exact number** |
-| Replication | Service page | **Fetch first; note qualified language** |
-| Incidents | [Post-Event Summaries](https://aws.amazon.com/premiumsupport/technology/pes/) | **Scope only, no impact assertions** |
+#### 3c. Qualified Language Verification
+- Fetch source page, extract EXACT wording, compare with document's presentation
 
-### Step 4: Generate Correction Report + Quality Score
+#### 3d. URL Validation
+- Fetch each cited URL, flag broken/redirected, extract actual posted dates
+
+### Step 4: Cross-Table Consistency Check (NEW in v7)
+- **Mode**: `agentic`
+- For EACH correction: search entire document for other mentions, verify consistency with headers/scopes/summaries
+
+### Step 5: Generate Correction Report + Quality Score
 - **Mode**: `deterministic`
 - **Tool**: `file_write`
-- **Input**: Verification results from Step 3
 - **Output**: `artifacts/fact-check-report.md`
 
 **Quality Score calculation:**
 ```
-# Qualified claims count as 0.5 (half-verified)
-fully_verified = count of ✅ (no qualifier)
-qualified = count of ✅ sourced but qualified
-score_numerator = fully_verified + (qualified × 0.5)
-pass_rate = score_numerator ÷ total_claims × 100
-score = round(pass_rate / 10, 1)
+pass_rate = (fully_verified + qualified×0.5) ÷ total_claims × 100
+score = round(pass_rate / 10, 1)  # e.g., 85.7% → 8.6/10
 
 Rating:
   9-10: Excellent — ready for customer delivery
@@ -202,27 +221,18 @@ Rating:
 # Fact Check Report: {document_name}
 **Date:** {today}
 **Scope:** {{check_scope}}
-**Checked by:** Document Fact Checker skill (v6)
+**Checked by:** Document Fact Checker skill
 
 ## Quality Score: X.X/10 ({rating})
-- Pass rate: XX% (verified ÷ total)
 - Total claims checked: X
-- ✅ Verified (hard facts): X
-- ✅⚠️ Sourced but qualified (actual test required): X
+- ✅ Verified: X
 - ⚠️ Partially correct: X
 - ❌ Incorrect: X
 - ❓ Unverifiable: X
-- 🔄 Source upgraded: X
-- 🔗 Broken URLs: X
 
 ## Corrections
 | # | Claim | Location | Issue | Correction | Source |
 |---|---|---|---|---|---|
-
-## Qualified Claims Requiring Validation
-| # | Claim | Location | AWS Exact Wording | Qualifier Used | Recommended Annotation |
-|---|---|---|---|---|---|
-| 1 | "<1s replication" | §3 table | "typically replicated within a second" | "typically" | Add: "per AWS docs — actual test required for Seoul→Tokyo P50/P99" |
 
 ## Third-Party Sources Flagged
 | Source | Used For | Replacement |
@@ -235,71 +245,53 @@ Rating:
 ## Misleading Framing
 | Phrase | Issue | Correction |
 |---|---|---|
-
-## Impact Language Flagged
-| Statement | Issue | Suggested Rewrite |
-|---|---|---|
-
-## Unverifiable Claims
-| Claim | Why | Action |
-|---|---|---|
 ```
 
-### Step 5: Apply Changes (based on output_format)
+### Step 6: Apply Changes (based on output_format)
 - **Mode**: `agentic`
 - **Tool**: `file_edit`
 - **Input**: Correction report + original document + `{{output_format}}`
-- **Output**: Modified document (if applicable)
 
-**Branching:**
-- `{{output_format}}` = **"report"** → Skip. Report only.
-- `{{output_format}}` = **"inline"** or **"both"** → Add footnotes/annotations. Mark ⚠️ items. Replace Tier 3/4 sources. **Add "actual test required" notes to qualified claims.**
-- `{{output_format}}` = **"fix"** → **Auto-correct ALL ❌ and ⚠️ items:**
+- **report** → Report only, no document changes
+- **inline** or **both** → Add footnotes/annotations. Mark ⚠️ items. Replace Tier 3/4 sources.
+- **fix** → Auto-correct ALL ❌ and ⚠️ items directly:
   1. Replace incorrect values with verified correct values
-  2. Replace Tier 3/4 sources with Tier 1 URLs
-  3. Fix broken URLs
-  4. Remove misleading framing
-  5. Rewrite impact assertions as factual scope descriptions
-  6. Replace undefined severity labels with factual event descriptions
-  7. Add missing citations
-  8. **Annotate qualified claims:** Add "(per AWS docs)" + "actual test required" disclaimer
-  9. **Do not strip qualifiers:** If AWS says "typically", keep "typically" in the document
-  10. Record each change as a diff in the report (old → new)
-  11. Do NOT ask user for confirmation — apply all fixes directly
+  2. Replace Tier 3/4 sources with Tier 1 URLs; fix broken URLs
+  3. Rewrite impact assertions as factual scope descriptions; remove undefined severity labels
+  4. Preserve qualifiers ("typically" stays) + add "actual test required" note
+  5. Record each change as a diff in the report (old → new)
+  6. Do NOT ask for confirmation — apply all fixes directly
 
-**Qualified claim fix pattern:**
-- Original: `<1s replication latency`
-- Fixed: `<1s replication latency (per AWS docs: "typically within a second") — **actual test required** to confirm for your workload`
-
-### Step 6: Deliver
+### Step 7: Deliver
 - **Mode**: `deterministic`
 - **Tool**: `open_in_session_tab`
-- **Input**: Generated files
-- **Output**: Files opened for review
 - Open correction report
 - If document was modified (inline/fix), open it too
-- Present: quality score, pass rate, critical issues count, changes applied
-- **Highlight qualified claims count** — these are items the customer should validate through testing
+- Present: quality score, critical issues count, negative claims verified count
 
 ## Lessons Learned
 
 ### Do
+- **Verify negative claims actively** — "None" and "No events" are factual claims that can be wrong
+- **Fetch the PES page first** — https://aws.amazon.com/premiumsupport/technology/pes/
+- **Check cross-table consistency** — a fix in one table may conflict with another
+- **Extract actual page dates** — URL paths lie; "Posted on" dates are truth
 - **Fetch before flagging** — check service pages before asserting "not published"
 - **Search each instance family separately** — C8g, M8g, R8g launch at different times
-- **Fetch SLA pages directly** — percentages change (EKS updated Mar 2026)
+- **Fetch SLA pages directly** — percentages change
 - **Split range claims** — verify both bounds independently
 - **Validate all URLs** — broken links erode credibility
-- **Describe incidents by scope, not impact** — state which AZ, which service, how long, and cite the AWS post-event summary. Never assert "no impact" on your own.
-- **Preserve qualified language** — if AWS says "typically", keep it. Do not upgrade to a guarantee.
-- **Add testing disclaimers** — for any qualified number in customer-facing docs, note that actual testing is required
+- **Describe incidents by scope, not impact**
 - Be conservative — flag as "unverifiable" over asserting without source
 
 ### Don't
+- **Don't skip negative claims** — "No outages reported" is a verifiable factual assertion
+- **Don't trust URL path dates** — `/2026/02/` might actually be posted in May 2026
+- **Don't fix one table and forget others** — same data often appears in 3+ locations
 - **Don't assert "AWS doesn't publish X" without checking**
-- **Don't use "no customer impact" / "unaffected" / "zero downtime"** unless quoting directly from an AWS post-event summary
-- **Don't use "major" / "minor" severity labels** without explicit definition — AWS has no official classification
-- **Don't mark "typically <1s" as ✅ verified** — it's sourced but qualified; flag it for testing
-- **Don't strip qualifiers** — presenting "typically <1s" as "<1s" overstates the claim
+- **Don't mark "typically <1s" as ✅ verified** — it's sourced but qualified
+- **Don't use "no customer impact" / "unaffected" / "zero downtime"** unless quoting AWS
+- **Don't use "major" / "minor" severity labels** without explicit definition
 - Don't trust third-party aggregators as authoritative
 - Don't lump instance families — they have different availability
 - Don't assume NMIP publishes static reference data
@@ -307,13 +299,14 @@ Rating:
 
 ### Common Pitfalls (verify by fetching before applying)
 
-> ⚠️ **HEURISTICS — not absolute rules.** Fetch the actual page before applying. Page wins over pitfall.
+> ⚠️ **HEURISTICS — not absolute rules.** Fetch the actual page before applying.
 
+- **"No events / None"** — ALWAYS check PES page. Seoul had DNS outage 2018. Tokyo had cooling incident 2019.
+- **Service availability "❌"** — regions add services continuously; can become stale within months
+- **What's New dates** — URL date ≠ actual posted date. ALWAYS fetch and check.
 - **"100% parity"** — Almost never true
-- **AZ counts** — Usable may differ from listed (Tokyo 4 vs 3)
+- **AZ counts** — Usable may differ from listed
 - **S3 SLA** — 99.9% (SLA) vs 99.99% (design goal)
-- **Replication "typical"** — Valid Tier 1 source, but NOT a P99 guarantee. Always add "actual test required" for customer docs.
 - **NMIP** — Measurement tool, not data publication
-- **Impact language** — "no customer impact", "unaffected", "zero downtime", "Multi-AZ architectures were not impacted" — these are impact assertions that require explicit AWS sourcing. **Correct approach:** describe factual scope only: "Event scope: single AZ. Other AZs were not part of this event per [AWS post-event summary](url)."
-- **Severity labels** — "major incident", "minor event", "0 major" — AWS does not publish a severity taxonomy for service events. **Correct approach:** describe events by factual scope (which AZ, which service, duration, what was/wasn't in scope per AWS summary) without assigning severity labels.
-- **Qualified numbers presented as guarantees** — "typically under 1 second" written as "<1s" without qualifier. **Correct approach:** preserve the qualifier, cite the source, and add "actual test required for your environment."
+- **Impact language** — Requires explicit AWS sourcing
+- **Severity labels** — AWS has no official taxonomy
