@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags for release-notes generation
 
       - name: Extract version from tag
         id: version
@@ -25,9 +27,13 @@ jobs:
           ./scripts/build-release.sh ${{ steps.version.outputs.VERSION }}
 
       - name: Generate release notes
-        id: notes
         run: |
-          cat << 'EOF' > release_notes.md
+          chmod +x scripts/gen-release-notes.sh
+          ./scripts/gen-release-notes.sh "${{ steps.version.outputs.VERSION }}" > release_notes.md
+          cat << 'EOF' >> release_notes.md
+
+          ---
+
           ## 📦 Amazon Quick Desktop Skills
 
           Download individual skill ZIPs or the all-in-one package.
@@ -58,7 +64,7 @@ jobs:
         with:
           body_path: release_notes.md
           files: dist/*
-          generate_release_notes: true
+          generate_release_notes: false   # grouped changelog comes from gen-release-notes.sh
           # Mark *-rc*, *-beta*, *-alpha* as pre-release; only stable tags become "latest".
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
           make_latest: ${{ !(contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha')) }}
