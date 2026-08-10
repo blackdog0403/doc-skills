@@ -1,0 +1,1 @@
+../../../scripts/translate_pptx_native.py

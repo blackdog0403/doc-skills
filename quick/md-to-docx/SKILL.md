@@ -14,10 +14,10 @@ inputs:
     type: path
     required: false
   - name: language
-    description: "Language for badge rules and labels — 'en' or 'ko'. Auto-detects from filename (-ko.md → Korean)."
+    description: "Language for badge rules and labels — 'en' or 'ko'. Defaults to English; Korean requires an explicit selection."
     type: string
     required: false
-    default: "auto"
+    default: "en"
   - name: footer
     description: "Custom footer text. Default: auto-generated with today's date."
     type: string
@@ -31,7 +31,14 @@ tools: [run_python, file_read, file_write, open_in_session_tab, fdfind, file_cop
 
 ## Overview
 
-Converts Markdown files to professionally styled Word documents using the `generate_styled_docx.py` script (located at `~/.local/bin/generate_styled_docx.py`). This is the same script used by the Claude Code `/md-to-docx` command.
+Converts Markdown files to professionally styled Word documents using the bundled `generate_styled_docx.py` helper, with `~/.local/bin/generate_styled_docx.py` as a developer-install fallback.
+
+## Output Language Safety
+
+- Conversion must not translate or rewrite the source document.
+- English is the default language for generated labels and headings.
+- Korean labels are allowed only when the user explicitly selects `language: ko`; filename suffixes never select Korean mode.
+- Never introduce Korean into non-Korean output.
 
 ## Styling Features
 
@@ -50,7 +57,7 @@ Converts Markdown files to professionally styled Word documents using the `gener
 ### Step 1: Validate Inputs & Locate File
 - **Mode**: `agentic`
 - Confirm the markdown file exists. If filename only (no path), search with `fdfind`.
-- Determine language: check filename for `-ko.md` suffix, or use user-specified language.
+- Use the user-specified language; default to English. Do not infer language from the filename.
 
 ### Step 2: Execute Conversion
 - **Mode**: `deterministic`
@@ -61,7 +68,7 @@ import subprocess, os
 
 file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
-language = "{{language}}"  # "en", "ko", or "auto"
+language = "{{language}}"  # "en" (default) or explicit "ko"
 footer = "{{footer}}"  # may be empty
 margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
 
@@ -82,8 +89,7 @@ cmd = ["python3", script, file_path]
 
 if output_path:
     cmd.extend(["-o", output_path])
-if language and language != "auto":
-    cmd.extend(["-l", language])
+cmd.extend(["-l", language or "en"])
 if footer:
     cmd.extend(["--footer", footer])
 if margins:
@@ -108,18 +114,12 @@ if result.returncode != 0:
 
 ## Batch Conversion
 
-When multiple files are provided, pass them all to the resolved `script` (from Step 2):
-
-```python
-cmd = ["python3", script, file1, file2, ...]
-```
-
-If user asks for "both English and Korean versions", look for the `-ko.md` counterpart automatically.
+When multiple files share one explicitly selected language, pass them together to the resolved `script`. For mixed English and Korean files, run separate commands with explicit `-l en` and `-l ko` flags. Only look for a Korean counterpart when the user explicitly asks for both versions.
 
 ## Lessons Learned
 
 ### Do
-- Auto-detect language from filename suffix (`-ko.md` → Korean)
+- Default to English and require an explicit `language: ko` selection for Korean labels
 - Open the output .docx in session tab after conversion
 - Copy output to same directory as input by default
 

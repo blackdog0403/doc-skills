@@ -4,9 +4,9 @@ description: |
   Translate PowerPoint presentations between languages natively — no external
   dependencies. The agent IS the translator (Claude/LLM). Uses bundled Python
   script for PPTX manipulation (text extraction, translation application, font
-  normalization). Activate when user says "translate pptx", "pptx 번역",
-  "translate this presentation", "translate slides", or asks to translate any
-  .pptx file between languages.
+  normalization). Activate when the user says "translate pptx",
+  "translate this presentation", "translate slides", or makes an equivalent
+  request in Korean to translate any .pptx file between languages.
 allowed-tools: [Bash, Read, Write, Edit, Glob]
 ---
 
@@ -19,6 +19,12 @@ Translates a PowerPoint (.pptx) file from one language to another. The agent its
 - Interactive — can ask the user about ambiguous terms mid-translation
 - Same quality — the LLM does the translation directly
 - Better context — sees full slide context when translating
+
+## Output Language Safety
+
+- The explicit target language is the sole authority for generated text; source language, trigger phrases, and examples must not override it.
+- When the target is not Korean, never generate or retain Korean text unless the user explicitly asks to preserve specific original-script text.
+- Transliterate non-Latin names into the target script by default. Retain original-script names only after an explicit user request.
 
 ## Arguments
 
@@ -40,14 +46,18 @@ Translates a PowerPoint (.pptx) file from one language to another. The agent its
 
 ### Step 2: Extract Translatable Text
 
-```bash
-python3 scripts/translate_pptx_native.py extract "<pptx_path>" --source-lang <source> --output extract.json
-```
+Resolve the native helper. Prefer the private CLI wrapper when installed because it carries an isolated Python environment:
 
-Or in Python:
-```python
-from translate_pptx_native import extract_texts
-result = extract_texts("<pptx_path>", source_lang="<source>")
+```bash
+HELPER=""
+for candidate in \
+  "$HOME/.local/bin/translate_pptx_native.py" \
+  "$HOME/.kiro/skills/translate-pptx/scripts/translate_pptx_native.py" \
+  "$HOME/.claude/skills/translate-pptx/scripts/translate_pptx_native.py"; do
+  if [ -x "$candidate" ]; then HELPER="$candidate"; break; fi
+done
+[ -n "$HELPER" ] || { echo "translate_pptx_native.py is not installed" >&2; exit 1; }
+"$HELPER" extract "<pptx_path>" --source-lang <source> --output extract.json
 ```
 
 Show summary (slide count, paragraph count, char count) and confirm before proceeding.
@@ -61,9 +71,9 @@ Process slide-by-slide, up to ~30 paragraphs at a time.
 
 **Translation rules:**
 - Produce natural, fluent target language — not word-by-word
-- Localize date formats (e.g. '2024년 10월' → 'October 2024')
+- Localize date formats naturally for the target language (for example, month-year ordering)
 - Keep technical terms, product names (AWS, EKS, DynamoDB, etc.) as-is
-- For company/person names in non-Latin scripts, keep original + romanization in parentheses
+- For company/person names in non-Latin scripts, transliterate into the target script; retain the original script only if explicitly requested
 - Preserve bullet points, line breaks, and formatting markers
 - If glossary provided, use those exact translations for matching terms
 
@@ -80,9 +90,11 @@ For large presentations (>100 paragraphs): Process in chunks of ~30 per turn. Sa
 
 ### Step 4: Apply Translations & Normalize
 
-```python
-from translate_pptx_native import apply_translations
-result = apply_translations("<pptx_path>", translations, output_path, target_lang="<target>")
+```bash
+"$HELPER" apply "<pptx_path>" \
+  --translations translations.json \
+  --output "<output_path>" \
+  --target-lang <target>
 ```
 
 Output filename: `{original_name}_{target_lang}.pptx`
@@ -92,15 +104,14 @@ Output filename: `{original_name}_{target_lang}.pptx`
 
 ### Step 5: Review Pass
 
-```python
-from translate_pptx_native import review
-result = review("<output_path>", source_lang="<source>")
+```bash
+"$HELPER" review "<output_path>" --source-lang <source> --output review.json
 ```
 
 If non-intentional remaining source text found:
 1. Show user what remains
 2. Re-extract just those slides → translate → apply again
-3. Max 2 review passes, then let user decide
+3. After 2 review passes, stop and report unresolved text; do not deliver a non-Korean output that still contains Korean unless the user explicitly requested that exact text be preserved
 
 ### Step 6: Deliver
 
@@ -113,8 +124,8 @@ If non-intentional remaining source text found:
 A translated `.pptx` file with:
 - All text translated from source to target language
 - Original formatting preserved (paragraph-level, first-run strategy)
-- Fonts normalized: Korean → 맑은 고딕, English → Amazon Ember, Japanese → Yu Gothic UI, Chinese → Microsoft YaHei
-- XML-level font patching (NanumSquare* → 맑은 고딕)
+- Fonts normalized: Korean to Malgun Gothic, English to Amazon Ember, Japanese to Yu Gothic UI, and Chinese to Microsoft YaHei
+- XML-level font patching from NanumSquare families to Malgun Gothic
 - Saved as `{original_name}_{target_lang}.pptx`
 
 ## Lessons Learned
@@ -140,5 +151,5 @@ A translated `.pptx` file with:
 - **Broken characters** — Font issue. Normalize pass should fix.
 
 ## Prerequisites
-- `python-pptx` installed (`pip install python-pptx`)
-- Script: `translate_pptx_native.py` (from doc-skills/scripts/)
+- Bundled helper: `scripts/translate_pptx_native.py`
+- Runtime dependency: `python-pptx`; `setup/install-cli.sh` installs it in a private environment

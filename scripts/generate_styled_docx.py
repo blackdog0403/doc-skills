@@ -12,14 +12,14 @@ import argparse
 import os
 import re
 import sys
-from datetime import date
+from datetime import datetime, timezone
 
 from docx import Document
-from docx.shared import Pt, RGBColor, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL
-from docx.oxml.ns import qn, nsdecls
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls, qn
+from docx.shared import Cm, Pt, RGBColor
 
 # === Colors ===
 AWS_ORANGE = "FF9900"
@@ -200,6 +200,7 @@ def _plain_run(paragraph, text, size, bold, color, italic=False):
 def add_hyperlink(paragraph, text, url, font_name="Amazon Ember", font_size=11):
     """Add a clickable hyperlink to a paragraph."""
     from xml.sax.saxutils import escape as xml_escape
+
     from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
     part = paragraph.part
@@ -409,10 +410,7 @@ class StyledDocxBuilder:
                 items = []
                 while i < len(lines):
                     nm2 = re.match(r"^(\d+)\.\s+(.+)$", lines[i])
-                    if nm2:
-                        items.append(lines[i])
-                        i += 1
-                    elif lines[i].startswith("   "):
+                    if nm2 or lines[i].startswith("   "):
                         items.append(lines[i])
                         i += 1
                     else:
@@ -910,7 +908,7 @@ class StyledDocxBuilder:
         if self.footer_text:
             txt = self.footer_text
         else:
-            today = date.today().isoformat()
+            today = datetime.now(timezone.utc).date().isoformat()
             txt = f"{today}  |  Confidential"
 
         r = fp.add_run(txt)
@@ -921,22 +919,14 @@ class StyledDocxBuilder:
 
 # -- Main ---------------------------------------------------------------------
 
-def detect_lang(md_path):
-    """Auto-detect language from filename convention (-ko suffix)."""
-    base = os.path.splitext(os.path.basename(md_path))[0]
-    if base.endswith("-ko"):
-        return "ko"
-    return "en"
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Convert markdown files to styled Word documents with AWS branding."
     )
     parser.add_argument("input", nargs="+", help="Input markdown file path(s)")
     parser.add_argument("-o", "--output", help="Output .docx file path (only valid with single input file)")
-    parser.add_argument("-l", "--lang", choices=["en", "ko"], default=None,
-                        help="Language for badge rules and labels (default: auto-detect from filename)")
+    parser.add_argument("-l", "--lang", choices=["en", "ko"], default="en",
+                        help="Language for badge rules and labels (default: en; Korean must be explicit)")
     parser.add_argument("--footer", default=None,
                         help="Custom footer text (default: auto-generated with date)")
     parser.add_argument("--margin-top", type=float, default=DEFAULT_MARGINS_CM["top"],
@@ -967,7 +957,7 @@ def main():
             sys.exit(1)
 
         out_path = args.output if args.output else os.path.splitext(md_path)[0] + ".docx"
-        lang = args.lang if args.lang else detect_lang(md_path)
+        lang = args.lang
 
         print(f"Generating styled Word document (lang={lang})...")
         builder = StyledDocxBuilder(lang=lang, footer_text=args.footer, margins=margins)
