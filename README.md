@@ -103,20 +103,47 @@ chmod +x setup/*.sh
 ```
 
 The installer:
-1. ✅ Checks your environment (Python, packages, agents)
-2. 📋 Lets you pick what to install (Kiro / Claude Code / Quick / CLI)
-3. 🔗 Creates symlinks with progress tracking
-4. ✓ Verifies the links
+1. Lets you select Kiro, Claude Code, Quick Desktop, CLI, or any combination
+2. Runs preflight checks only for the selected targets
+3. Creates safe, idempotent links and backs up conflicting paths
+4. Bundles the DOCX and native PPTX helpers with agent skills
+5. Verifies only the selected targets and exits nonzero on failure
+
+Non-interactive target selection is also available:
+
+```bash
+./setup/install.sh --target kiro
+./setup/install.sh --target kiro --target cli
+```
 
 <details>
 <summary>Manual install (individual scripts)</summary>
 
 ```bash
-./setup/link-slash.sh     # Kiro + Claude Code only
+./setup/link-kiro.sh      # Kiro only
+./setup/link-claude.sh    # Claude Code only
+./setup/link-slash.sh     # Kiro + Claude Code
 ./setup/link-quick.sh     # Amazon Quick Desktop only
-./setup/install-cli.sh    # CLI scripts to ~/.local/bin/ only
+./setup/install-cli.sh    # Private venv + wrappers in ~/.local/bin/
 ```
 </details>
+
+### Uninstall
+
+Uninstall only the targets you choose. The uninstaller removes repository-owned
+links and wrappers, preserves backups and unrelated paths, and asks for
+confirmation unless `--yes` is supplied.
+
+```bash
+./setup/uninstall.sh --target kiro
+./setup/uninstall.sh --target kiro --target claude
+./setup/uninstall.sh --target all
+
+# Also remove the private CLI environment when it carries the ownership marker
+./setup/uninstall.sh --target cli --remove-venv
+```
+
+Use `--yes` for non-interactive automation.
 
 ### 3. Use
 
@@ -233,11 +260,15 @@ doc-skills/
 │       └── test_placeholder.py
 │
 ├── setup/                           # Installation scripts
-│   ├── install.sh                   #   Interactive installer
+│   ├── install.sh                   #   Interactive or --target installer
+│   ├── lib.sh                       #   Shared safe-link and backup helpers
+│   ├── link-kiro.sh                 #   Kiro only
+│   ├── link-claude.sh               #   Claude Code only
 │   ├── link-slash.sh                #   Kiro + Claude Code
 │   ├── link-quick.sh                #   Amazon Quick Desktop
-│   ├── install-cli.sh               #   CLI to ~/.local/bin/
-│   └── test-setup.sh                #   Verify installation
+│   ├── install-cli.sh               #   Private venv + CLI wrappers
+│   ├── uninstall.sh                 #   Safe target-aware removal
+│   └── test-setup.sh                #   Target-aware verification
 │
 ├── docs/
 │   └── skill-format.md              # How to write multi-agent skills
@@ -252,7 +283,7 @@ doc-skills/
 
 ### <img src="https://kiro.dev/favicon.ico" width="16"/> Kiro
 
-Skills are auto-discovered from `~/.kiro/skills/`. After running `link-slash.sh`:
+Skills are auto-discovered from `~/.kiro/skills/`. After running `link-kiro.sh`:
 
 ```
 # Invoke directly as slash command
@@ -414,14 +445,17 @@ pip3 install --user python-docx python-pptx
 pip3 install --user boto3
 ```
 
-**Option C: Minimal (skills only, no scripts)**
+**Option C: Agent registration only**
 ```bash
-# No Python packages needed.
-# Skills run from SKILL.md alone, so link-slash.sh is enough.
+# Registers both agents and bundles helper script paths.
 ./setup/link-slash.sh
 ```
 
-> ℹ️ The **doc-fact-check** skill uses no Python scripts, so it works without any package install.
+The bundled helpers still require `python-docx` and `python-pptx` at runtime. Run
+`./setup/install-cli.sh` to create an isolated environment and install portable
+wrappers, or install those packages in the Python environment used by the agent.
+
+> The **doc-fact-check** and **stop-slop** skills do not require Python helper packages.
 </details>
 
 <details>
@@ -464,13 +498,12 @@ aws sts get-caller-identity   # Should print your identity
 <summary><b>Verify Installation</b></summary>
 
 ```bash
-# Full environment check (after install)
+# Check every target
 ./setup/test-setup.sh
 
-# Individual checks
-python3 -c "import docx; print(f'python-docx {docx.__version__}')"
-python3 -c "import pptx; print(f'python-pptx {pptx.__version__}')"
-python3 -c "import boto3; print(f'boto3 {boto3.__version__}')"  # CLI only
+# Check only what you installed
+./setup/test-setup.sh --target kiro
+./setup/test-setup.sh --target cli
 ```
 </details>
 
