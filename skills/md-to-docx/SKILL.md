@@ -16,8 +16,9 @@ Convert markdown files to styled Word documents (.docx) with AWS branding.
 ## Output Language Safety
 
 - Conversion must not translate or rewrite the source document.
-- English is the default language for generated labels and headings.
-- Korean labels are allowed only when the user explicitly supplies `lang:ko`; filename suffixes never select Korean mode.
+- Before conversion, explicitly ask which language to use for generated labels and headings: English (default) or Korean.
+- Treat `default` as English. Korean is used only when the user selects it.
+- Source text, filename suffixes, and the language of the request must never determine this choice.
 - Never introduce Korean into non-Korean output.
 
 ## When to Use
@@ -38,12 +39,16 @@ Convert markdown files to styled Word documents (.docx) with AWS branding.
 
 ## Required Conversion Preflight
 
-Before starting any conversion, collect the footer and customization choices. Ask only for items the user has not already supplied, and combine missing questions into one message.
+Before starting any conversion, collect the generated-label language, footer, and customization choices. Ask only for items the user has not already supplied, and combine missing questions into one message.
 
-1. **Footer** — Ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+1. **Generated-label language** — Ask: **"Which language should the generated document labels use: English (default) or Korean? This controls labels such as the table-of-contents title, metadata labels, badges, and page numbering; it does not translate or rewrite the Markdown."**
+   - If the user supplied `lang:en` or `lang:ko`, do not ask again.
+   - Map `English`, `en`, or `default` to `en`; map `Korean` or `ko` to `ko`.
+   - Never infer the answer from the source text, filename, filename suffix, or language used to invoke the skill.
+2. **Footer** — Ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
    - If the user supplied `footer:<text>`, do not ask again.
    - If the answer is `default`, omit `--footer`. Otherwise, pass the answer unchanged to `--footer`.
-2. **Optional customization** — Ask: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
+3. **Optional customization** — Ask: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
    - Do not ask if the user already selected customizations or explicitly requested defaults.
    - `default` means no title page, TOC, page numbering, header, or logo; Letter portrait with standard margins.
 
@@ -54,6 +59,7 @@ Do not run the converter until the required preflight answers are available. For
 Resolve and execute the bundled helper. Prefer the private CLI wrapper when installed because it carries an isolated Python environment:
 
 ```bash
+LANGUAGE="<en-or-ko-from-preflight>"
 HELPER=""
 for candidate in \
   "$HOME/.local/bin/generate_styled_docx.py" \
@@ -62,7 +68,7 @@ for candidate in \
   if [ -x "$candidate" ]; then HELPER="$candidate"; break; fi
 done
 [ -n "$HELPER" ] || { echo "generate_styled_docx.py is not installed" >&2; exit 1; }
-"$HELPER" "<file_path>" [options]
+"$HELPER" "<file_path>" -l "$LANGUAGE" [options]
 ```
 
 ### Argument Parsing
@@ -87,7 +93,7 @@ Map options to CLI flags:
 - `orientation:portrait|landscape` → `--orientation <value>`
 - `margin:<top,bottom,left,right>` (cm) → `--margin-top <t> --margin-bottom <b> --margin-left <l> --margin-right <r>`
 
-If no language is specified, use English. Filename suffixes do not select the output language.
+If no language is specified in the initial request, ask the generated-label language question. `default` selects English. Always invoke the helper with exactly one explicit `-l en` or `-l ko` flag; filename suffixes do not select language.
 
 ### Core Options
 - `-o` / `--output`: Output .docx file path (default: same name as input with .docx extension)
@@ -114,9 +120,9 @@ If no language is specified, use English. Filename suffixes do not select the ou
 - **Numbered & bullet lists**: Orange-accented numbering and bullets
 
 ### Language Support
-- `en`: English badge rules (e.g., "on the roadmap" → ON ROADMAP badge)
-- `ko`: Korean-language badge matching, including roadmap-status phrases
-- Korean mode requires an explicit `lang:ko` request; filenames are not language signals
+- `en`: English generated labels and English badge rules (e.g., "on the roadmap" → ON ROADMAP badge)
+- `ko`: Korean generated labels and Korean-language badge matching
+- Ask whenever language is omitted. The answer `default` selects `en`; Korean requires an explicit user selection. Filenames and source text are not language signals.
 
 ### Batch Conversion
 
@@ -132,7 +138,7 @@ If the user explicitly asks to convert both English and Korean versions, locate 
 ## Examples
 
 ```
-/md-to-docx 'meeting-notes.md'                                          # Defaults to English
+/md-to-docx 'meeting-notes.md'                                          # Preflight asks; `default` selects English
 /md-to-docx 'meeting-notes.md, output:final-report.docx'                # Custom output path
 /md-to-docx 'meeting-notes.md, lang:ko'                                 # Force Korean mode
 /md-to-docx 'meeting-notes.md, footer:Team Meeting | May 2026'          # Custom footer

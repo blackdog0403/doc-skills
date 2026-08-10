@@ -14,10 +14,9 @@ inputs:
     type: path
     required: false
   - name: language
-    description: "Language for badge rules and labels — 'en' or 'ko'. Defaults to English; Korean requires an explicit selection."
+    description: "Language for generated labels and headings — 'en'/'English' (default choice) or 'ko'/'Korean'. The skill asks if omitted; this does not translate the Markdown."
     type: string
-    required: false
-    default: "en"
+    required: true
   - name: footer
     description: "Footer text to use. The skill asks for this if omitted. Use {date} for today's UTC date, or reply 'default' for '{date} | Confidential'."
     type: string
@@ -93,8 +92,9 @@ Converts Markdown files to professionally styled Word documents using the bundle
 ## Output Language Safety
 
 - Conversion must not translate or rewrite the source document.
-- English is the default language for generated labels and headings.
-- Korean labels are allowed only when the user explicitly selects `language: ko`; filename suffixes never select Korean mode.
+- Before conversion, explicitly ask which language to use for generated labels and headings: English (default) or Korean.
+- Treat `default` as English. Korean is used only when the user selects it.
+- Source text, filename suffixes, and the language of the request must never determine this choice.
 - Never introduce Korean into non-Korean output.
 
 ## Styling Features
@@ -114,11 +114,13 @@ Converts Markdown files to professionally styled Word documents using the bundle
 ### Step 1: Validate Inputs & Collect Preferences
 - **Mode**: `agentic`
 - Confirm the markdown file exists. If filename only (no path), search with `fdfind`.
-- Use the user-specified language; default to English. Do not infer language from the filename.
 - Ask only for preferences the user has not already supplied, combining missing questions into one message:
-  1. **Footer**: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
-  2. **Customization**: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
-- Do not ask the customization question if the user already selected settings or explicitly requested defaults.
+  1. **Generated-label language**: **"Which language should the generated document labels use: English (default) or Korean? This controls labels such as the table-of-contents title, metadata labels, badges, and page numbering; it does not translate or rewrite the Markdown."**
+     - Map `English`, `en`, or `default` to `en`; map `Korean` or `ko` to `ko`.
+     - Never infer this choice from source text, filename, filename suffix, or invocation language.
+  2. **Footer**: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+  3. **Customization**: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
+- Do not ask a question if the user already supplied its answer. Do not ask the customization question if the user explicitly requested defaults.
 - Do not execute the conversion until the required preflight answers are available. Use shared answers for all files unless the user requests per-file settings.
 
 ### Step 2: Execute Conversion
@@ -130,7 +132,7 @@ import subprocess, os
 
 file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
-language = "{{language}}"  # "en" (default) or explicit "ko"
+language_answer = "{{language}}".strip().lower()
 footer = "{{footer}}"
 title_page = "{{title_page}}"
 title = "{{title}}"
@@ -146,6 +148,17 @@ logo_path = "{{logo_path}}"
 page_size = "{{page_size}}" or "letter"
 orientation = "{{orientation}}" or "portrait"
 margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
+
+language_aliases = {
+    "default": "en",
+    "en": "en",
+    "english": "en",
+    "ko": "ko",
+    "korean": "ko",
+}
+if language_answer not in language_aliases:
+    raise SystemExit("ERROR: Choose English (en/default) or Korean (ko) for generated labels.")
+language = language_aliases[language_answer]
 
 def enabled(value):
     return value.strip().lower() in {"1", "true", "yes", "on"}
@@ -171,7 +184,7 @@ cmd = ["python3", script, file_path]
 
 if output_path:
     cmd.extend(["-o", output_path])
-cmd.extend(["-l", language or "en"])
+cmd.extend(["-l", language])
 if footer:
     cmd.extend(["--footer", footer])
 if enabled(title_page):
@@ -222,7 +235,8 @@ When multiple files share one explicitly selected language, pass them together t
 ## Lessons Learned
 
 ### Do
-- Default to English and require an explicit `language: ko` selection for Korean labels
+- Ask for the generated-label language when omitted; map `default` to English and always pass explicit `-l en` or `-l ko`
+- Keep source Markdown unchanged; the language option controls generated labels only
 - Open the output .docx in session tab after conversion
 - Copy output to same directory as input by default
 
