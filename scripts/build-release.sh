@@ -20,13 +20,28 @@ DIST_DIR="$REPO_ROOT/dist"
 INSTALL_GUIDE="$REPO_ROOT/docs/INSTALL-QUICK.md"
 VERSION="${1:-$(date +%Y%m%d)}"
 
+copy_english_install_guide() {
+    # Runtime skill bundles carry only English, non-Hangul instructions.
+    python3 - "$INSTALL_GUIDE" "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source, destination = map(Path, sys.argv[1:])
+english_section = source.read_text().split("## 🇰🇷", 1)[0]
+hangul = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
+clean_lines = [line for line in english_section.splitlines() if not hangul.search(line)]
+destination.write_text("\n".join(clean_lines).rstrip() + "\n")
+PY
+}
+
 # Ensure script-bundling symlinks exist (CI checkout doesn't have them).
 # These are normally created by setup/link-quick.sh; the build needs them
 # present so cp -L can resolve into the staging area. Skip if already linked
 # (e.g., quick/stop-slop/references is committed as a relative symlink).
 ensure_link() {
     local target="$1" link="$2"
-    [ -e "$link" ] && return 0   # already exists (real or symlink); leave alone
+    { [ -e "$link" ] || [ -L "$link" ]; } && return 0   # already exists; leave alone
     mkdir -p "$(dirname "$link")"
     ln -s "$target" "$link"
 }
@@ -73,7 +88,7 @@ for skill_dir in "$QUICK_DIR"/*/; do
 
     # Include install guide for non-technical users
     if [ -f "$INSTALL_GUIDE" ]; then
-        cp "$INSTALL_GUIDE" "$skill_staging/INSTALL.md"
+        copy_english_install_guide "$skill_staging/INSTALL.md"
     fi
 
     # Create individual ZIP
@@ -99,7 +114,7 @@ done
 
 # Top-level install guide for the bundle
 if [ -f "$INSTALL_GUIDE" ]; then
-    cp "$INSTALL_GUIDE" "$ALL_STAGING/INSTALL.md"
+    copy_english_install_guide "$ALL_STAGING/INSTALL.md"
 fi
 
 (cd "$STAGING" && zip -rq "$DIST_DIR/doc-skills-all-quick-v${VERSION}.zip" "doc-skills-all/")
