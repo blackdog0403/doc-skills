@@ -22,6 +22,63 @@ inputs:
     description: "Footer text to use. The skill asks for this if omitted. Use {date} for today's UTC date, or reply 'default' for '{date} | Confidential'."
     type: string
     required: true
+  - name: title_page
+    description: "Whether to add a title page — 'true' or 'false'. Supplying title metadata also enables it."
+    type: string
+    required: false
+    default: "false"
+  - name: title
+    description: "Title-page title. Defaults to the first H1 or filename."
+    type: string
+    required: false
+  - name: subtitle
+    description: "Optional title-page subtitle."
+    type: string
+    required: false
+  - name: author
+    description: "Optional title-page author and DOCX author property."
+    type: string
+    required: false
+  - name: team
+    description: "Optional title-page team and DOCX category property."
+    type: string
+    required: false
+  - name: version
+    description: "Optional title-page document version."
+    type: string
+    required: false
+  - name: classification
+    description: "Optional title-page classification, such as Public, Internal, or Confidential."
+    type: string
+    required: false
+  - name: toc
+    description: "Whether to add an auto-updating table of contents — 'true' or 'false'."
+    type: string
+    required: false
+    default: "false"
+  - name: page_numbers
+    description: "Whether to append Page X of Y to the footer — 'true' or 'false'."
+    type: string
+    required: false
+    default: "false"
+  - name: header
+    description: "Optional header text."
+    type: string
+    required: false
+  - name: logo_path
+    description: "Optional path to a PNG, JPEG, GIF, BMP, or TIFF header logo."
+    type: path
+    required: false
+  - name: page_size
+    description: "Page size — 'letter', 'a4', or 'legal'."
+    type: string
+    required: false
+    default: "letter"
+  - name: orientation
+    description: "Page orientation — 'portrait' or 'landscape'."
+    type: string
+    required: false
+    default: "portrait"
   - name: margins
     description: "Page margins in cm as 'top,bottom,left,right' (e.g. '2.54,2.54,2.0,2.0'). Default: top/bottom 2.54, left/right 2.0. Empty string keeps defaults."
     type: string
@@ -54,12 +111,15 @@ Converts Markdown files to professionally styled Word documents using the bundle
 
 ## Workflow
 
-### Step 1: Validate Inputs & Collect Footer
+### Step 1: Validate Inputs & Collect Preferences
 - **Mode**: `agentic`
 - Confirm the markdown file exists. If filename only (no path), search with `fdfind`.
 - Use the user-specified language; default to English. Do not infer language from the filename.
-- If footer text was not supplied, ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
-- Do not execute the conversion until the user answers. Use one answer for all files unless the user requests per-file footers.
+- Ask only for preferences the user has not already supplied, combining missing questions into one message:
+  1. **Footer**: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+  2. **Customization**: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
+- Do not ask the customization question if the user already selected settings or explicitly requested defaults.
+- Do not execute the conversion until the required preflight answers are available. Use shared answers for all files unless the user requests per-file settings.
 
 ### Step 2: Execute Conversion
 - **Mode**: `deterministic`
@@ -72,7 +132,23 @@ file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
 language = "{{language}}"  # "en" (default) or explicit "ko"
 footer = "{{footer}}"
+title_page = "{{title_page}}"
+title = "{{title}}"
+subtitle = "{{subtitle}}"
+author = "{{author}}"
+team = "{{team}}"
+version = "{{version}}"
+classification = "{{classification}}"
+toc = "{{toc}}"
+page_numbers = "{{page_numbers}}"
+header = "{{header}}"
+logo_path = "{{logo_path}}"
+page_size = "{{page_size}}" or "letter"
+orientation = "{{orientation}}" or "portrait"
 margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
+
+def enabled(value):
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 # "default" selects the converter's date-based default footer.
 if footer.strip().lower() == "default":
@@ -98,6 +174,27 @@ if output_path:
 cmd.extend(["-l", language or "en"])
 if footer:
     cmd.extend(["--footer", footer])
+if enabled(title_page):
+    cmd.append("--title-page")
+for flag, value in [
+    ("--title", title),
+    ("--subtitle", subtitle),
+    ("--author", author),
+    ("--team", team),
+    ("--version", version),
+    ("--classification", classification),
+]:
+    if value:
+        cmd.extend([flag, value])
+if enabled(toc):
+    cmd.append("--toc")
+if enabled(page_numbers):
+    cmd.append("--page-numbers")
+if header:
+    cmd.extend(["--header", header])
+if logo_path:
+    cmd.extend(["--logo", logo_path])
+cmd.extend(["--page-size", page_size.lower(), "--orientation", orientation.lower()])
 if margins:
     parts = [p.strip() for p in margins.split(",")]
     if len(parts) == 4:

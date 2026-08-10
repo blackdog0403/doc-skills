@@ -15,9 +15,10 @@ import sys
 from datetime import datetime, timezone
 
 from docx import Document
+from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 from docx.shared import Cm, Pt, RGBColor
 
@@ -268,14 +269,50 @@ PRIORITY_BADGE = {
 # -- Document builder ---------------------------------------------------------
 
 DEFAULT_MARGINS_CM = {"top": 2.54, "bottom": 2.54, "left": 2.0, "right": 2.0}
+PAGE_SIZES_CM = {
+    "letter": (21.59, 27.94),
+    "a4": (21.0, 29.7),
+    "legal": (21.59, 35.56),
+}
 
 
 class StyledDocxBuilder:
-    def __init__(self, lang="en", footer_text=None, margins=None):
+    def __init__(
+        self,
+        lang="en",
+        footer_text=None,
+        margins=None,
+        page_size="letter",
+        orientation="portrait",
+        title_page=False,
+        title=None,
+        subtitle=None,
+        author=None,
+        team=None,
+        version=None,
+        classification=None,
+        toc=False,
+        page_numbers=False,
+        header_text=None,
+        logo_path=None,
+    ):
         self.doc = Document()
         self.lang = lang
         self.footer_text = footer_text
         self.margins = {**DEFAULT_MARGINS_CM, **(margins or {})}
+        self.page_size = page_size
+        self.orientation = orientation
+        self.title_page = title_page
+        self.title = title
+        self.subtitle = subtitle
+        self.author = author
+        self.team = team
+        self.version = version
+        self.classification = classification
+        self.toc = toc
+        self.page_numbers = page_numbers
+        self.header_text = header_text
+        self.logo_path = logo_path
         self.badge_rules = BADGE_RULES_EN if lang == "en" else BADGE_RULES_KO
         self.footnotes = {}
         self.extra_notes = []
@@ -290,11 +327,23 @@ class StyledDocxBuilder:
         pf.space_after = Pt(6)
         pf.line_spacing = 1.15
 
+        width_cm, height_cm = PAGE_SIZES_CM[self.page_size]
+        if self.orientation == "landscape":
+            width_cm, height_cm = height_cm, width_cm
+
         for section in self.doc.sections:
+            section.orientation = (
+                WD_ORIENT.LANDSCAPE
+                if self.orientation == "landscape"
+                else WD_ORIENT.PORTRAIT
+            )
+            section.page_width = Cm(width_cm)
+            section.page_height = Cm(height_cm)
             section.top_margin = Cm(self.margins["top"])
             section.bottom_margin = Cm(self.margins["bottom"])
             section.left_margin = Cm(self.margins["left"])
             section.right_margin = Cm(self.margins["right"])
+            section.different_first_page_header_footer = self.title_page
 
         sizes = {1: 22, 2: 15, 3: 12}
         befores = {1: 12, 2: 18, 3: 12}  # H1 gets 12pt so the title doesn't hug the top margin
@@ -315,6 +364,7 @@ class StyledDocxBuilder:
             raw = f.read()
         raw = self._preprocess_html(raw)
         lines = raw.splitlines()
+        self._add_front_matter(lines, md_path)
         self.footnotes, self.extra_notes, skip_lines = self._extract_footnotes(lines)
         i = 0
         in_code_block = False
@@ -458,11 +508,180 @@ class StyledDocxBuilder:
             # blank line
             i += 1
 
-        # -- Endnotes + Footer --
+        # -- Endnotes + Header/Footer --
         self._render_endnotes()
+        self._add_header()
         self._add_footer()
         self.doc.save(out_path)
         print(f"  -> {out_path}")
+
+    def _plain_title(self, lines, md_path):
+        """Select a title from CLI metadata, the first body H1, or filename."""
+        if self.title:
+            return self.title
+        in_code_block = False
+        for line in lines:
+            if re.match(r"^`{3,}", line.strip()):
+                in_code_block = not in_code_block
+                continue
+            if in_code_block:
+                continue
+            match = re.match(r"^#\s+(.+)$", line)
+            if match:
+                title = match.group(1).strip()
+                title = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", title)
+                title = re.sub(r"`([^`]+)`", r"\1", title)
+                title = re.sub(r"\*\*([^*]+)\*\*", r"\1", title)
+                title = re.sub(r"__([^_]+)__", r"\1", title)
+                title = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", title)
+                title = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", title)
+                return title
+        stem = os.path.splitext(os.path.basename(md_path))[0]
+        return stem.replace("-", " ").replace("_", " ").title()
+
+    def _set_core_properties(self, title):
+        """Mirror supplied title-page metadata into standard DOCX properties."""
+        properties = self.doc.core_properties
+        properties.title = title
+        if self.subtitle:
+            properties.subject = self.subtitle
+        if self.author:
+            properties.author = self.author
+        if self.team:
+            properties.category = self.team
+        keywords = []
+        if self.version:
+            keywords.append(f"version:{self.version}")
+        if self.classification:
+            keywords.append(f"classification:{self.classification}")
+            properties.comments = self.classification
+        if keywords:
+            properties.keywords = "; ".join(keywords)
+
+    def _add_title_page(self, lines, md_path):
+        """Render a centered title page and metadata block."""
+        title = self._plain_title(lines, md_path)
+        self._set_core_properties(title)
+
+        spacer = self.doc.add_paragraph()
+        set_paragraph_spacing(spacer, before=72, after=24)
+
+        paragraph = self.doc.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = paragraph.add_run(title)
+        run.font.name = "Amazon Ember"
+        run.font.size = Pt(28)
+        run.font.bold = True
+        run.font.color.rgb = DARK_GRAY
+        add_paragraph_border(paragraph, sz="10", color=AWS_ORANGE, space="12")
+
+        if self.subtitle:
+            paragraph = self.doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = paragraph.add_run(self.subtitle)
+            run.font.name = "Amazon Ember"
+            run.font.size = Pt(15)
+            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            set_paragraph_spacing(paragraph, before=8, after=24)
+
+        labels = {
+            "en": ("Author", "Team", "Version", "Classification"),
+            "ko": ("작성자", "팀", "버전", "분류"),
+        }[self.lang]
+        metadata = zip(
+            labels,
+            (self.author, self.team, self.version, self.classification),
+        )
+        for label, value in metadata:
+            if not value:
+                continue
+            paragraph = self.doc.add_paragraph()
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            label_run = paragraph.add_run(f"{label}: ")
+            label_run.font.name = "Amazon Ember"
+            label_run.font.size = Pt(10)
+            label_run.font.bold = True
+            label_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            value_run = paragraph.add_run(value)
+            value_run.font.name = "Amazon Ember"
+            value_run.font.size = Pt(10)
+            value_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        self.doc.add_page_break()
+
+    def _add_word_field(self, paragraph, instruction, placeholder):
+        """Append a Word field code with readable fallback text."""
+        run = paragraph.add_run()
+        begin = OxmlElement("w:fldChar")
+        begin.set(qn("w:fldCharType"), "begin")
+        begin.set(qn("w:dirty"), "true")
+        instr = OxmlElement("w:instrText")
+        instr.set(qn("xml:space"), "preserve")
+        instr.text = instruction
+        separate = OxmlElement("w:fldChar")
+        separate.set(qn("w:fldCharType"), "separate")
+        text = OxmlElement("w:t")
+        text.text = placeholder
+        end = OxmlElement("w:fldChar")
+        end.set(qn("w:fldCharType"), "end")
+        run._r.extend((begin, instr, separate, text, end))
+        return run
+
+    def _request_field_updates(self):
+        """Ask Word-compatible editors to refresh TOC and page fields on open."""
+        settings = self.doc.settings._element
+        update = settings.find(qn("w:updateFields"))
+        if update is None:
+            update = OxmlElement("w:updateFields")
+            settings.append(update)
+        update.set(qn("w:val"), "true")
+
+    def _add_toc(self):
+        """Add a dynamic table of contents for Heading 1 through Heading 3."""
+        paragraph = self.doc.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run = paragraph.add_run("Table of Contents" if self.lang == "en" else "목차")
+        run.font.name = "Amazon Ember"
+        run.font.size = Pt(20)
+        run.font.bold = True
+        run.font.color.rgb = DARK_GRAY
+        add_paragraph_border(paragraph, sz="8", color=AWS_ORANGE, space="6")
+
+        field_paragraph = self.doc.add_paragraph()
+        self._add_word_field(
+            field_paragraph,
+            ' TOC \\o "1-3" \\h \\z \\u ',
+            "Update this field to populate the table of contents.",
+        )
+        self._request_field_updates()
+        self.doc.add_page_break()
+
+    def _add_front_matter(self, lines, md_path):
+        """Add selected title-page and TOC content before the Markdown body."""
+        if self.title_page:
+            self._add_title_page(lines, md_path)
+        if self.toc:
+            self._add_toc()
+
+    def _add_header(self):
+        """Add optional text and/or a logo to the default page header."""
+        if not self.header_text and not self.logo_path:
+            return
+        for section in self.doc.sections:
+            header = section.header
+            header.is_linked_to_previous = False
+            paragraph = header.paragraphs[0]
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            if self.logo_path:
+                picture_run = paragraph.add_run()
+                picture_run.add_picture(self.logo_path, width=Cm(2.5))
+            if self.header_text:
+                if self.logo_path:
+                    paragraph.add_run("  ")
+                run = paragraph.add_run(self.header_text)
+                run.font.name = "Amazon Ember"
+                run.font.size = Pt(9)
+                run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
     def _preprocess_html(self, text):
         """Convert common GitHub-README HTML to markdown equivalents and strip the rest.
@@ -912,10 +1131,36 @@ class StyledDocxBuilder:
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        r = fp.add_run(self._resolved_footer_text())
-        r.font.name = "Amazon Ember"
-        r.font.size = Pt(8)
-        r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+        footer_text = self._resolved_footer_text()
+        if footer_text:
+            run = fp.add_run(footer_text)
+            run.font.name = "Amazon Ember"
+            run.font.size = Pt(8)
+            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+        if self.page_numbers:
+            if footer_text:
+                separator = fp.add_run("  |  ")
+                separator.font.name = "Amazon Ember"
+                separator.font.size = Pt(8)
+                separator.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            label = "Page " if self.lang == "en" else "페이지 "
+            of_label = " of " if self.lang == "en" else " / "
+            prefix = fp.add_run(label)
+            prefix.font.name = "Amazon Ember"
+            prefix.font.size = Pt(8)
+            prefix.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            page_run = self._add_word_field(fp, " PAGE ", "1")
+            between = fp.add_run(of_label)
+            between.font.name = "Amazon Ember"
+            between.font.size = Pt(8)
+            between.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            count_run = self._add_word_field(fp, " NUMPAGES ", "1")
+            for field_run in (page_run, count_run):
+                field_run.font.name = "Amazon Ember"
+                field_run.font.size = Pt(8)
+                field_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+            self._request_field_updates()
 
 
 # -- Main ---------------------------------------------------------------------
@@ -931,6 +1176,24 @@ def main():
     parser.add_argument("--footer", default=None,
                         help="Footer text; {date} expands to today's UTC date "
                              "(default: {date} | Confidential)")
+    parser.add_argument("--title-page", action="store_true",
+                        help="Add a title page; metadata options also enable it")
+    parser.add_argument("--title", help="Title-page title (default: first H1 or filename)")
+    parser.add_argument("--subtitle", help="Title-page subtitle")
+    parser.add_argument("--author", help="Title-page author and DOCX author property")
+    parser.add_argument("--team", help="Title-page team and DOCX category property")
+    parser.add_argument("--version", help="Title-page document version")
+    parser.add_argument("--classification", help="Title-page classification")
+    parser.add_argument("--toc", action="store_true",
+                        help="Add an auto-updating table of contents for headings 1-3")
+    parser.add_argument("--page-numbers", action="store_true",
+                        help="Append Page X of Y fields to the footer")
+    parser.add_argument("--header", help="Header text")
+    parser.add_argument("--logo", help="Path to a PNG, JPEG, GIF, BMP, or TIFF header logo")
+    parser.add_argument("--page-size", choices=sorted(PAGE_SIZES_CM), default="letter",
+                        help="Page size (default: letter)")
+    parser.add_argument("--orientation", choices=["portrait", "landscape"], default="portrait",
+                        help="Page orientation (default: portrait)")
     parser.add_argument("--margin-top", type=float, default=DEFAULT_MARGINS_CM["top"],
                         help=f"Top margin in cm (default: {DEFAULT_MARGINS_CM['top']})")
     parser.add_argument("--margin-bottom", type=float, default=DEFAULT_MARGINS_CM["bottom"],
@@ -945,6 +1208,9 @@ def main():
     if args.output and len(args.input) > 1:
         print("Error: -o/--output can only be used with a single input file.", file=sys.stderr)
         sys.exit(1)
+    if args.logo and not os.path.isfile(args.logo):
+        print(f"Error: Logo file not found: {args.logo}", file=sys.stderr)
+        sys.exit(1)
 
     margins = {
         "top": args.margin_top,
@@ -952,6 +1218,16 @@ def main():
         "left": args.margin_left,
         "right": args.margin_right,
     }
+    metadata_values = (
+        args.title,
+        args.subtitle,
+        args.author,
+        args.team,
+        args.version,
+        args.classification,
+    )
+    title_page = args.title_page or any(metadata_values)
+    logo_path = os.path.abspath(args.logo) if args.logo else None
 
     for md_path in args.input:
         if not os.path.isfile(md_path):
@@ -962,7 +1238,24 @@ def main():
         lang = args.lang
 
         print(f"Generating styled Word document (lang={lang})...")
-        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer, margins=margins)
+        builder = StyledDocxBuilder(
+            lang=lang,
+            footer_text=args.footer,
+            margins=margins,
+            page_size=args.page_size,
+            orientation=args.orientation,
+            title_page=title_page,
+            title=args.title,
+            subtitle=args.subtitle,
+            author=args.author,
+            team=args.team,
+            version=args.version,
+            classification=args.classification,
+            toc=args.toc,
+            page_numbers=args.page_numbers,
+            header_text=args.header,
+            logo_path=logo_path,
+        )
         builder.build(md_path, out_path)
 
     print("Done!")

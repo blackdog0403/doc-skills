@@ -72,7 +72,7 @@ class FooterInstructionTests(unittest.TestCase):
                 instructions = path.read_text(encoding="utf-8")
                 self.assertIn("What should the footer say?", instructions)
                 self.assertIn("Do not", instructions)
-                self.assertIn("until the user answers", instructions)
+                self.assertIn("required preflight answers are available", instructions)
                 self.assertIn("{date}", instructions)
                 self.assertIn("default", instructions)
 

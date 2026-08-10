@@ -36,15 +36,18 @@ Convert markdown files to styled Word documents (.docx) with AWS branding.
 /md-to-docx '<file_path1>' '<file_path2>'
 ```
 
-## Required Footer Preflight
+## Required Conversion Preflight
 
-Before starting any conversion, determine the footer text:
+Before starting any conversion, collect the footer and customization choices. Ask only for items the user has not already supplied, and combine missing questions into one message.
 
-- If the user supplied `footer:<text>`, do not ask again.
-- Otherwise, ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
-- Do not run the converter until the user answers.
-- If the answer is `default`, omit `--footer`. Otherwise, pass the answer unchanged to `--footer`; the converter expands `{date}` at generation time.
-- For multiple files, use the answer for all files unless the user provides per-file footer text.
+1. **Footer** — Ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+   - If the user supplied `footer:<text>`, do not ask again.
+   - If the answer is `default`, omit `--footer`. Otherwise, pass the answer unchanged to `--footer`.
+2. **Optional customization** — Ask: **"Any other document customization? Reply `default`, or specify a title page (title, subtitle, author, team, version, classification), table of contents, Page X of Y numbering, header text/logo, page size (Letter/A4/Legal), orientation, or margins."**
+   - Do not ask if the user already selected customizations or explicitly requested defaults.
+   - `default` means no title page, TOC, page numbering, header, or logo; Letter portrait with standard margins.
+
+Do not run the converter until the required preflight answers are available. For multiple files, apply shared answers to all files unless the user provides per-file settings.
 
 ## Behavior
 
@@ -74,6 +77,14 @@ Map options to CLI flags:
 - `output:<path>` → `-o <path>`
 - `lang:en` or `lang:ko` → `-l en` or `-l ko`
 - `footer:<text>` → `--footer "<text>"`
+- `title-page:true` → `--title-page`
+- `title`, `subtitle`, `author`, `team`, `version`, `classification` → corresponding `--<name> "<value>"` flags; any supplied metadata automatically enables the title page
+- `toc:true` → `--toc`
+- `page-numbers:true` → `--page-numbers`
+- `header:<text>` → `--header "<text>"`
+- `logo:<path>` → `--logo "<path>"`
+- `page-size:letter|a4|legal` → `--page-size <value>`
+- `orientation:portrait|landscape` → `--orientation <value>`
 - `margin:<top,bottom,left,right>` (cm) → `--margin-top <t> --margin-bottom <b> --margin-left <l> --margin-right <r>`
 
 If no language is specified, use English. Filename suffixes do not select the output language.
@@ -81,8 +92,14 @@ If no language is specified, use English. Filename suffixes do not select the ou
 ### Core Options
 - `-o` / `--output`: Output .docx file path (default: same name as input with .docx extension)
 - `-l` / `--lang`: Language for badge rules and labels — `en` or `ko` (default: `en`)
-- `--footer`: Custom footer text (default: auto-generated with today's date)
-- `--margin-top`, `--margin-bottom`, `--margin-left`, `--margin-right`: Page margins in cm. Default: top/bottom 2.54, left/right 2.0
+- `--footer`: Footer text; `{date}` expands at generation time (default: `{date} | Confidential`)
+- `--title-page`: Add a title page. `--title`, `--subtitle`, `--author`, `--team`, `--version`, and `--classification` populate it; metadata flags enable the page automatically. Title defaults to the first H1 or filename.
+- `--toc`: Add a Word table-of-contents field covering Heading 1 through Heading 3. Word-compatible editors refresh it when the file opens.
+- `--page-numbers`: Append auto-updating `Page X of Y` fields to the footer.
+- `--header`, `--logo`: Add header text and/or a 2.5 cm-wide image. Supported image formats depend on `python-docx` (PNG, JPEG, GIF, BMP, or TIFF).
+- `--page-size`: `letter`, `a4`, or `legal` (default: `letter`)
+- `--orientation`: `portrait` or `landscape` (default: `portrait`)
+- `--margin-top`, `--margin-bottom`, `--margin-left`, `--margin-right`: Page margins in cm. Defaults: top/bottom 2.54, left/right 2.0.
 
 ### Styling Features
 - **AWS-branded**: Calibri 11pt font, AWS Orange (#FF9900) accents
