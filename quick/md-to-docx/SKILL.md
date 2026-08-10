@@ -19,9 +19,9 @@ inputs:
     required: false
     default: "en"
   - name: footer
-    description: "Custom footer text. Default: auto-generated with today's date."
+    description: "Footer text to use. The skill asks for this if omitted. Use {date} for today's UTC date, or reply 'default' for '{date} | Confidential'."
     type: string
-    required: false
+    required: true
   - name: margins
     description: "Page margins in cm as 'top,bottom,left,right' (e.g. '2.54,2.54,2.0,2.0'). Default: top/bottom 2.54, left/right 2.0. Empty string keeps defaults."
     type: string
@@ -54,10 +54,12 @@ Converts Markdown files to professionally styled Word documents using the bundle
 
 ## Workflow
 
-### Step 1: Validate Inputs & Locate File
+### Step 1: Validate Inputs & Collect Footer
 - **Mode**: `agentic`
 - Confirm the markdown file exists. If filename only (no path), search with `fdfind`.
 - Use the user-specified language; default to English. Do not infer language from the filename.
+- If footer text was not supplied, ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+- Do not execute the conversion until the user answers. Use one answer for all files unless the user requests per-file footers.
 
 ### Step 2: Execute Conversion
 - **Mode**: `deterministic`
@@ -69,8 +71,12 @@ import subprocess, os
 file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
 language = "{{language}}"  # "en" (default) or explicit "ko"
-footer = "{{footer}}"  # may be empty
+footer = "{{footer}}"
 margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
+
+# "default" selects the converter's date-based default footer.
+if footer.strip().lower() == "default":
+    footer = ""
 
 # Locate generate_styled_docx.py: prefer the skill bundle (ZIP install),
 # fall back to ~/.local/bin/ (developer install via setup/install-cli.sh)

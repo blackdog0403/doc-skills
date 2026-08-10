@@ -36,6 +36,16 @@ Convert markdown files to styled Word documents (.docx) with AWS branding.
 /md-to-docx '<file_path1>' '<file_path2>'
 ```
 
+## Required Footer Preflight
+
+Before starting any conversion, determine the footer text:
+
+- If the user supplied `footer:<text>`, do not ask again.
+- Otherwise, ask: **"What should the footer say? You can use `{date}` for today's UTC date (for example, `{date} | Team Name | Confidential`). Reply `default` to use `{date} | Confidential`."**
+- Do not run the converter until the user answers.
+- If the answer is `default`, omit `--footer`. Otherwise, pass the answer unchanged to `--footer`; the converter expands `{date}` at generation time.
+- For multiple files, use the answer for all files unless the user provides per-file footer text.
+
 ## Behavior
 
 Resolve and execute the bundled helper. Prefer the private CLI wrapper when installed because it carries an isolated Python environment:

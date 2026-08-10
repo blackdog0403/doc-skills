@@ -893,8 +893,15 @@ class StyledDocxBuilder:
                 add_badge(paragraph, label, color)
                 break
 
+    def _resolved_footer_text(self):
+        """Return the selected footer, expanding the documented date token."""
+        today = datetime.now(timezone.utc).date().isoformat()
+        if self.footer_text is None:
+            return f"{today}  |  Confidential"
+        return self.footer_text.replace("{date}", today)
+
     def _add_footer(self):
-        """Add a styled footer separator and credit line."""
+        """Add the user-selected footer to every generated document."""
         p = self.doc.add_paragraph()
         set_paragraph_spacing(p, before=24, after=4)
         add_paragraph_border(p, side="top", sz="4", color="D0D0D0", space="8")
@@ -905,13 +912,7 @@ class StyledDocxBuilder:
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        if self.footer_text:
-            txt = self.footer_text
-        else:
-            today = datetime.now(timezone.utc).date().isoformat()
-            txt = f"{today}  |  Confidential"
-
-        r = fp.add_run(txt)
+        r = fp.add_run(self._resolved_footer_text())
         r.font.name = "Amazon Ember"
         r.font.size = Pt(8)
         r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
@@ -928,7 +929,8 @@ def main():
     parser.add_argument("-l", "--lang", choices=["en", "ko"], default="en",
                         help="Language for badge rules and labels (default: en; Korean must be explicit)")
     parser.add_argument("--footer", default=None,
-                        help="Custom footer text (default: auto-generated with date)")
+                        help="Footer text; {date} expands to today's UTC date "
+                             "(default: {date} | Confidential)")
     parser.add_argument("--margin-top", type=float, default=DEFAULT_MARGINS_CM["top"],
                         help=f"Top margin in cm (default: {DEFAULT_MARGINS_CM['top']})")
     parser.add_argument("--margin-bottom", type=float, default=DEFAULT_MARGINS_CM["bottom"],
