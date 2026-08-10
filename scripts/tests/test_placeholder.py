@@ -2,4 +2,3 @@
 
 def test_imports():
     """Verify scripts can be imported."""
-    pass
