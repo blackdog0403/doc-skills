@@ -93,10 +93,13 @@ EOF
         4) select_target quick ;;
         5) select_target cli ;;
         6)
-            ask_yes_no 'Install for Kiro?' y && INSTALL_KIRO=true
-            ask_yes_no 'Install for Claude Code?' n && INSTALL_CLAUDE=true
-            ask_yes_no 'Install for Amazon Quick Desktop?' n && INSTALL_QUICK=true
-            ask_yes_no 'Install standalone CLI tools?' n && INSTALL_CLI=true
+            # Each answer is wrapped in `if`, not `&&`: a declined prompt makes an
+            # `&&` list return 1, and as the function's last command that aborts
+            # the installer under `set -e` before anything is installed.
+            if ask_yes_no 'Install for Kiro?' y; then INSTALL_KIRO=true; fi
+            if ask_yes_no 'Install for Claude Code?' n; then INSTALL_CLAUDE=true; fi
+            if ask_yes_no 'Install for Amazon Quick Desktop?' n; then INSTALL_QUICK=true; fi
+            if ask_yes_no 'Install standalone CLI tools?' n; then INSTALL_CLI=true; fi
             ;;
         *)
             printf 'ERROR: Invalid choice: %s\n' "$choice" >&2
