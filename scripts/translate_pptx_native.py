@@ -9,9 +9,8 @@ This script handles the non-LLM parts of PPTX translation:
 The agent handles the actual translation (it IS the LLM).
 """
 
-import os
 import re
-
+import os
 from pptx import Presentation
 
 # ── Font Config ──
@@ -299,8 +298,8 @@ def _normalize_fonts(prs, target_lang='en'):
 
 def _patch_docprops(pptx_path):
     """Patch docProps/app.xml to replace font references in the ZIP."""
-    import shutil
     import zipfile
+    import shutil
     tmp = pptx_path + '.tmp'
     try:
         with zipfile.ZipFile(pptx_path, 'r') as zin, zipfile.ZipFile(tmp, 'w') as zout:
@@ -313,6 +312,6 @@ def _patch_docprops(pptx_path):
                     data = text.encode('utf-8')
                 zout.writestr(item, data)
         shutil.move(tmp, pptx_path)
-    except Exception:  # noqa: BLE001 - leave the original file untouched on any failure
+    except Exception:
         if os.path.exists(tmp):
             os.remove(tmp)

@@ -18,17 +18,12 @@ inputs:
     type: string
     required: false
     default: "auto"
-  - name: style
-    description: "Document style — 'aws' (AWS-branded, default) or 'meridian' (classic Amazon narrative: Calibri, black & white, Page X of Y footer). Use 'meridian' for 1-pagers, 6-pagers, and PR/FAQ."
-    type: string
-    required: false
-    default: "aws"
   - name: footer
     description: "Custom footer text. Default: auto-generated with today's date."
     type: string
     required: false
   - name: margins
-    description: "Page margins in cm as 'top,bottom,left,right' (e.g. '2.54,2.54,2.0,2.0'). Default comes from the style — aws: 2.54/2.0, meridian: 1.27 all round. Empty string keeps defaults."
+    description: "Page margins in cm as 'top,bottom,left,right' (e.g. '2.54,2.54,2.0,2.0'). Default: top/bottom 2.54, left/right 2.0. Empty string keeps defaults."
     type: string
     required: false
 tools: [run_python, file_read, file_write, open_in_session_tab, fdfind, file_copy]
@@ -38,29 +33,12 @@ tools: [run_python, file_read, file_write, open_in_session_tab, fdfind, file_cop
 
 Converts Markdown files to professionally styled Word documents using the `generate_styled_docx.py` script (located at `~/.local/bin/generate_styled_docx.py`). This is the same script used by the Claude Code `/md-to-docx` command.
 
-## Document Styles
-
-Two styles are available via the `style` input:
-
-| | `aws` (default) | `meridian` |
-|---|---|---|
-| Use for | Customer-facing reports, meeting notes | 1-pagers, 6-pagers, PR/FAQ — narrative docs |
-| Font | Amazon Ember 11pt | Calibri 10.5pt, justified |
-| Color | AWS Orange accents, navy table headers | Pure black & white, gray table headers |
-| Headings | Large H1/H2 with orange rule | Body-size bold with a thin black rule |
-| Badges | Status + priority badges | Suppressed (plain text) |
-| Footer | Centered date · Confidential | "Amazon Confidential" left · "Page X of Y" right |
-| Margins | 2.54 / 2.0 cm | 1.27 cm all round |
-
-Choose `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, or a black-and-white internal document ("흑백으로", "내부 문서 스타일로"). Otherwise use `aws`.
-
 ## Styling Features
 
-- **AWS-branded**: Amazon Ember 11pt font, AWS Orange (#FF9900) accents
+- **AWS-branded**: Calibri 11pt font, AWS Orange (#FF9900) accents
 - **Headings**: H1-H6 support with orange underline on H2
 - **Key Takeaways**: Orange-accented callout box (auto-detected from blockquotes)
 - **Code blocks**: Fenced code blocks rendered as monospace shaded boxes
-- **Mermaid**: ` ```mermaid ` blocks render as embedded diagrams when `npx` is available, otherwise they fall back to a code box (see Prerequisites)
 - **Tables**: Dark navy header, alternating row colors, thin borders
 - **Badges**: Auto-detected status badges (ON ROADMAP, NOT TODAY, LIMITED, LIMITATION)
 - **Priority badges**: High (red), Medium (orange), Low (green) in table cells
@@ -84,7 +62,6 @@ import subprocess, os
 file_path = "{{file_path}}"
 output_path = "{{output_path}}"  # may be empty
 language = "{{language}}"  # "en", "ko", or "auto"
-style = "{{style}}"  # "aws" (default) or "meridian"
 footer = "{{footer}}"  # may be empty
 margins = "{{margins}}"  # may be empty; format: "top,bottom,left,right" in cm
 
@@ -107,8 +84,6 @@ if output_path:
     cmd.extend(["-o", output_path])
 if language and language != "auto":
     cmd.extend(["-l", language])
-if style and style != "aws":
-    cmd.extend(["-s", style])
 if footer:
     cmd.extend(["--footer", footer])
 if margins:
@@ -129,7 +104,7 @@ if result.returncode != 0:
 ### Step 3: Deliver
 - **Mode**: `deterministic`
 - Open the generated .docx in session tab with `open_in_session_tab`
-- Report: input file, output file, language used, style used
+- Report: input file, output file, language used
 
 ## Batch Conversion
 
@@ -155,4 +130,3 @@ If user asks for "both English and Korean versions", look for the `-ko.md` count
 ### Prerequisites
 - `python-docx` is pre-installed in Amazon Quick Desktop's sandbox
 - Script: bundled at `skill/md-to-docx/scripts/generate_styled_docx.py` (ZIP install) or `~/.local/bin/generate_styled_docx.py` (developer install)
-- Mermaid diagrams need `npx` (Node.js), which the Quick sandbox does not provide — ` ```mermaid ` blocks render as code boxes there. Tell the user to run the converter locally (developer install) if they need the diagram drawn.

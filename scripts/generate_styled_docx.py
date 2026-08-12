@@ -9,21 +9,17 @@ Usage:
 """
 
 import argparse
-import atexit
 import os
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 from datetime import date
 
 from docx import Document
+from docx.shared import Pt, RGBColor, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.oxml.ns import qn, nsdecls
 from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls, qn
-from docx.shared import Cm, Pt, RGBColor
 
 # === Colors ===
 AWS_ORANGE = "FF9900"
@@ -38,37 +34,6 @@ BADGE_NOT_STARTED = "6C757D"
 TABLE_HEADER_BG = "232F3E"  # AWS dark navy
 TABLE_ALT_ROW = "F8F9FA"
 CODE_BG = "F0F0F0"
-
-# Meridian (classic Amazon narrative) palette - pure black & white
-MERIDIAN_TEXT = RGBColor(0x00, 0x00, 0x00)
-MERIDIAN_TABLE_HEADER_BG = "D9D9D9"  # light gray header fill
-MERIDIAN_BORDER = "808080"           # gray cell borders
-MERIDIAN_RULE = "000000"             # black heading underline
-
-
-# === Theme (reconfigured per --style) ========================================
-# The inline renderers below are module-level functions and can't see the
-# builder instance, so the body font / size / color and inline-code color live
-# here and are reset by configure_theme() at the start of each conversion.
-BODY_FONT = "Amazon Ember"
-BODY_SIZE = 11
-BODY_COLOR = DARK_GRAY
-INLINE_CODE_COLOR = RGBColor(0xC7, 0x25, 0x4E)
-
-
-def configure_theme(style):
-    """Set the module-level font/size/color theme used by the inline renderers."""
-    global BODY_FONT, BODY_SIZE, BODY_COLOR, INLINE_CODE_COLOR
-    if style == "meridian":
-        BODY_FONT = "Calibri"
-        BODY_SIZE = 10.5
-        BODY_COLOR = MERIDIAN_TEXT
-        INLINE_CODE_COLOR = RGBColor(0x33, 0x33, 0x33)
-    else:
-        BODY_FONT = "Amazon Ember"
-        BODY_SIZE = 11
-        BODY_COLOR = DARK_GRAY
-        INLINE_CODE_COLOR = RGBColor(0xC7, 0x25, 0x4E)
 
 
 # -- Helpers ------------------------------------------------------------------
@@ -178,13 +143,9 @@ INLINE_RE = re.compile(
 )
 
 
-def add_formatted_text(paragraph, text, base_size=None, base_bold=False,
-                       base_color=None, base_italic=False):
+def add_formatted_text(paragraph, text, base_size=11, base_bold=False,
+                       base_color=DARK_GRAY, base_italic=False):
     """Render inline markdown (bold, italic, code, link, ^N footnote) into a paragraph."""
-    if base_size is None:
-        base_size = BODY_SIZE
-    if base_color is None:
-        base_color = BODY_COLOR
     pos = 0
     for m in INLINE_RE.finditer(text):
         if m.start() > pos:
@@ -193,14 +154,14 @@ def add_formatted_text(paragraph, text, base_size=None, base_bold=False,
 
         if m.group(1):  # **bold**
             r = paragraph.add_run(m.group(2))
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(base_size)
             r.font.bold = True
             r.font.italic = base_italic
             r.font.color.rgb = base_color
         elif m.group(3):  # *italic*
             r = paragraph.add_run(m.group(4))
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(base_size)
             r.font.italic = True
             r.font.color.rgb = base_color
@@ -208,7 +169,7 @@ def add_formatted_text(paragraph, text, base_size=None, base_bold=False,
             r = paragraph.add_run(m.group(6))
             r.font.name = "Consolas"
             r.font.size = Pt(base_size - 1)
-            r.font.color.rgb = INLINE_CODE_COLOR
+            r.font.color.rgb = RGBColor(0xC7, 0x25, 0x4E)
             add_run_shading(r, CODE_BG)
         elif m.group(7):  # [text](url)
             link_text = m.group(8)
@@ -216,7 +177,7 @@ def add_formatted_text(paragraph, text, base_size=None, base_bold=False,
             add_hyperlink(paragraph, link_text, link_url, font_size=base_size)
         elif m.group(10):  # ^N footnote reference
             r = paragraph.add_run(m.group(11))
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(max(base_size - 2, 7))
             r.font.color.rgb = base_color
             r.font.superscript = True
@@ -228,22 +189,17 @@ def add_formatted_text(paragraph, text, base_size=None, base_bold=False,
 
 
 def _plain_run(paragraph, text, size, bold, color, italic=False):
-    if size is None:
-        size = BODY_SIZE
     r = paragraph.add_run(text)
-    r.font.name = BODY_FONT
+    r.font.name = "Amazon Ember"
     r.font.size = Pt(size)
     r.font.bold = bold
     r.font.italic = italic
     r.font.color.rgb = color
 
 
-def add_hyperlink(paragraph, text, url, font_name=None, font_size=11):
+def add_hyperlink(paragraph, text, url, font_name="Amazon Ember", font_size=11):
     """Add a clickable hyperlink to a paragraph."""
-    if font_name is None:
-        font_name = BODY_FONT
     from xml.sax.saxutils import escape as xml_escape
-
     from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
     part = paragraph.part
@@ -274,7 +230,7 @@ def add_hyperlink(paragraph, text, url, font_name=None, font_size=11):
 def add_badge(paragraph, label, bg_color):
     """Insert a small coloured badge (pill) inline."""
     r = paragraph.add_run(f"  {label}  ")
-    r.font.name = BODY_FONT
+    r.font.name = "Amazon Ember"
     r.font.size = Pt(8)
     r.font.bold = True
     r.font.color.rgb = WHITE
@@ -308,108 +264,30 @@ PRIORITY_BADGE = {
 }
 
 
-# -- Mermaid rendering (optional; falls back to a code box on any failure) ----
-
-# Font stack applied inside rendered SVG/PNG so Korean glyphs don't break.
-_MERMAID_FONT_STACK = (
-    '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", '
-    '"Nanum Gothic", -apple-system, "Segoe UI", sans-serif'
-)
-_MERMAID_CSS = (
-    f"svg {{ font-family: {_MERMAID_FONT_STACK}; }}\n"
-    ".nodeLabel, .edgeLabel, .titleText, .taskText, .sectionTitle, "
-    f"text, span, div, p {{ font-family: {_MERMAID_FONT_STACK} !important; }}\n"
-)
-
-# mermaid-cli is only probed once per process.
-_MERMAID_CLI_CHECKED = False
-_MERMAID_CLI_AVAILABLE = False
-
-
-def mermaid_cli_available():
-    """True if npx is on PATH so mermaid-cli can be invoked. Probed once."""
-    global _MERMAID_CLI_CHECKED, _MERMAID_CLI_AVAILABLE
-    if not _MERMAID_CLI_CHECKED:
-        _MERMAID_CLI_CHECKED = True
-        _MERMAID_CLI_AVAILABLE = shutil.which("npx") is not None
-    return _MERMAID_CLI_AVAILABLE
-
-
-def render_mermaid_to_png(source, workdir, index, scale=3):
-    """Render one mermaid diagram to a PNG. Returns the file path, or None on failure.
-
-    Rendering to a high-scale PNG keeps the diagram crisp when Word rescales it.
-    Any failure (no npx, mmdc error, timeout) returns None so the caller can
-    fall back to rendering the mermaid source as a code box.
-    """
-    if not mermaid_cli_available():
-        return None
-    try:
-        css = os.path.join(workdir, "mermaid.css")
-        if not os.path.exists(css):
-            with open(css, "w", encoding="utf-8") as fh:
-                fh.write(_MERMAID_CSS)
-        mmd = os.path.join(workdir, f"fig{index}.mmd")
-        png = os.path.join(workdir, f"fig{index}.png")
-        with open(mmd, "w", encoding="utf-8") as fh:
-            fh.write(source + "\n")
-        proc = subprocess.run(
-            ["npx", "-y", "-p", "@mermaid-js/mermaid-cli", "mmdc",
-             "-i", mmd, "-o", png,
-             "--cssFile", css, "-b", "white", "-s", str(scale)],
-            capture_output=True, text=True, timeout=180, check=False,
-        )
-        if os.path.exists(png) and os.path.getsize(png) > 0:
-            return png
-        detail = proc.stderr[-500:] if proc.stderr else ""
-        sys.stderr.write(
-            f"  (mermaid {index} render failed; falling back to code box)\n{detail}\n")
-    except Exception as e:  # noqa: BLE001 - never let a diagram break the build
-        sys.stderr.write(f"  (mermaid {index} render error: {e}; falling back)\n")
-    return None
-
-
 # -- Document builder ---------------------------------------------------------
 
 DEFAULT_MARGINS_CM = {"top": 2.54, "bottom": 2.54, "left": 2.0, "right": 2.0}
 
 
 class StyledDocxBuilder:
-    def __init__(self, lang="en", footer_text=None, margins=None, style="aws"):
+    def __init__(self, lang="en", footer_text=None, margins=None):
         self.doc = Document()
         self.lang = lang
-        self.style = style
         self.footer_text = footer_text
         self.margins = {**DEFAULT_MARGINS_CM, **(margins or {})}
         self.badge_rules = BADGE_RULES_EN if lang == "en" else BADGE_RULES_KO
-        self.accent = MERIDIAN_TEXT if style == "meridian" else RGBColor(0xFF, 0x99, 0x00)
         self.footnotes = {}
         self.extra_notes = []
-        # Mermaid diagram rendering (lazy temp dir, per-doc counter)
-        self._mermaid_workdir = None
-        self._mermaid_count = 0
-        configure_theme(style)
         self._setup_styles()
 
-    def _get_mermaid_workdir(self):
-        if self._mermaid_workdir is None:
-            self._mermaid_workdir = tempfile.mkdtemp(prefix="docx-mermaid-")
-            atexit.register(shutil.rmtree, self._mermaid_workdir, ignore_errors=True)
-        return self._mermaid_workdir
-
     def _setup_styles(self):
-        normal = self.doc.styles["Normal"]
-        normal.font.name = BODY_FONT
-        normal.font.size = Pt(BODY_SIZE)
-        normal.font.color.rgb = BODY_COLOR
-        pf = normal.paragraph_format
-        if self.style == "meridian":
-            pf.space_after = Pt(0)
-            pf.line_spacing = 1.0
-            pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        else:
-            pf.space_after = Pt(6)
-            pf.line_spacing = 1.15
+        style = self.doc.styles["Normal"]
+        style.font.name = "Amazon Ember"
+        style.font.size = Pt(11)
+        style.font.color.rgb = DARK_GRAY
+        pf = style.paragraph_format
+        pf.space_after = Pt(6)
+        pf.line_spacing = 1.15
 
         for section in self.doc.sections:
             section.top_margin = Cm(self.margins["top"])
@@ -417,23 +295,15 @@ class StyledDocxBuilder:
             section.left_margin = Cm(self.margins["left"])
             section.right_margin = Cm(self.margins["right"])
 
-        if self.style == "meridian":
-            # Section headers are body-size bold black - no large heading sizes
-            sizes = {1: BODY_SIZE, 2: BODY_SIZE, 3: BODY_SIZE}
-            befores = {1: 8, 2: 8, 3: 6}
-            afters = {1: 2, 2: 2, 3: 2}
-            head_color = MERIDIAN_TEXT
-        else:
-            sizes = {1: 22, 2: 15, 3: 12}
-            befores = {1: 12, 2: 18, 3: 12}  # H1 gets 12pt so the title doesn't hug the top margin
-            afters = {1: 6, 2: 6, 3: 4}
-            head_color = DARK_GRAY
+        sizes = {1: 22, 2: 15, 3: 12}
+        befores = {1: 12, 2: 18, 3: 12}  # H1 gets 12pt so the title doesn't hug the top margin
+        afters = {1: 6, 2: 6, 3: 4}
         for lvl in (1, 2, 3):
             hs = self.doc.styles[f"Heading {lvl}"]
-            hs.font.name = BODY_FONT
+            hs.font.name = "Amazon Ember"
             hs.font.size = Pt(sizes[lvl])
             hs.font.bold = True
-            hs.font.color.rgb = head_color
+            hs.font.color.rgb = DARK_GRAY
             hs.paragraph_format.space_before = Pt(befores[lvl])
             hs.paragraph_format.space_after = Pt(afters[lvl])
 
@@ -465,14 +335,8 @@ class StyledDocxBuilder:
                     i += 1
                     continue
                 else:
-                    # End of code block — render it.
-                    # A mermaid block becomes an embedded image when mermaid-cli
-                    # is available; otherwise it falls back to the code box.
-                    if code_block_lang.lower() == "mermaid" and \
-                            self._render_mermaid_block(code_block_lines):
-                        pass
-                    else:
-                        self._render_code_block(code_block_lines, code_block_lang)
+                    # End of code block — render it
+                    self._render_code_block(code_block_lines, code_block_lang)
                     in_code_block = False
                     code_block_lines = []
                     code_block_lang = ""
@@ -499,31 +363,19 @@ class StyledDocxBuilder:
                 if level <= 3:
                     p = self.doc.add_heading(level=level)
                     p.clear()
-                    if self.style == "meridian":
-                        add_formatted_text(p, text, base_size=BODY_SIZE,
-                                           base_bold=True, base_color=BODY_COLOR)
-                        if level <= 2:
-                            add_paragraph_border(p, side="bottom", sz="6",
-                                                 color=MERIDIAN_RULE, space="1")
-                    else:
-                        size = {1: 22, 2: 15, 3: 12}[level]
-                        add_formatted_text(p, text, base_size=size,
-                                           base_bold=True, base_color=DARK_GRAY)
-                        if level == 1:
-                            add_paragraph_border(p, sz="8", color=AWS_ORANGE, space="6")
-                        elif level == 2:
-                            add_paragraph_border(p)
+                    size = {1: 22, 2: 15, 3: 12}[level]
+                    add_formatted_text(p, text, base_size=size,
+                                       base_bold=True, base_color=DARK_GRAY)
+                    if level == 1:
+                        add_paragraph_border(p, sz="8", color=AWS_ORANGE, space="6")
+                    elif level == 2:
+                        add_paragraph_border(p)
                 else:
                     p = self.doc.add_paragraph()
-                    if self.style == "meridian":
-                        add_formatted_text(p, text, base_size=BODY_SIZE,
-                                           base_bold=True, base_color=BODY_COLOR)
-                        set_paragraph_spacing(p, before=8, after=2)
-                    else:
-                        size = {4: 11, 5: 11, 6: 10}.get(level, 11)
-                        add_formatted_text(p, text, base_size=size,
-                                           base_bold=True, base_color=DARK_GRAY)
-                        set_paragraph_spacing(p, before=10, after=4)
+                    size = {4: 11, 5: 11, 6: 10}.get(level, 11)
+                    add_formatted_text(p, text, base_size=size,
+                                       base_bold=True, base_color=DARK_GRAY)
+                    set_paragraph_spacing(p, before=10, after=4)
                 i += 1
                 continue
 
@@ -557,7 +409,10 @@ class StyledDocxBuilder:
                 items = []
                 while i < len(lines):
                     nm2 = re.match(r"^(\d+)\.\s+(.+)$", lines[i])
-                    if nm2 or lines[i].startswith("   "):
+                    if nm2:
+                        items.append(lines[i])
+                        i += 1
+                    elif lines[i].startswith("   "):
                         items.append(lines[i])
                         i += 1
                     else:
@@ -585,7 +440,7 @@ class StyledDocxBuilder:
                 p = self.doc.add_paragraph()
                 set_paragraph_spacing(p, before=0, after=2)
                 r = p.add_run(f"{meta_m.group(1)}: ")
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(10)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
@@ -724,7 +579,7 @@ class StyledDocxBuilder:
             p = self.doc.add_paragraph()
             set_paragraph_spacing(p, before=1, after=1)
             r = p.add_run(str(n))
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(8)
             r.font.superscript = True
             r.font.color.rgb = gray
@@ -736,7 +591,7 @@ class StyledDocxBuilder:
             p = self.doc.add_paragraph()
             set_paragraph_spacing(p, before=1, after=1)
             r = p.add_run("  •  ")
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(9)
             r.font.color.rgb = gray
             add_formatted_text(p, note, base_size=9,
@@ -744,33 +599,8 @@ class StyledDocxBuilder:
 
     # -- Renderers ------------------------------------------------------------
 
-    def _render_key_takeaways_plain(self, bq_lines):
-        """Meridian: Key Takeaways as a plain bold heading + bullets (no box/orange)."""
-        title = "Key Takeaways" if self.lang == "en" else "핵심 요약"
-        p = self.doc.add_paragraph()
-        set_paragraph_spacing(p, before=8, after=2)
-        add_formatted_text(p, title, base_size=BODY_SIZE, base_bold=True,
-                           base_color=BODY_COLOR)
-        add_paragraph_border(p, side="bottom", sz="6", color=MERIDIAN_RULE, space="1")
-        for line in bq_lines:
-            line = line.strip()
-            if not line or "Key Takeaways" in line or "핵심 요약" in line:
-                continue
-            line = line.removeprefix("- ")
-            bp = self.doc.add_paragraph()
-            bp.paragraph_format.left_indent = Cm(0.6)
-            set_paragraph_spacing(bp, before=1, after=1)
-            r = bp.add_run("•  ")
-            r.font.name = BODY_FONT
-            r.font.size = Pt(BODY_SIZE)
-            r.font.color.rgb = BODY_COLOR
-            add_formatted_text(bp, line, base_size=BODY_SIZE)
-
     def _render_key_takeaways(self, bq_lines):
         """Render Key Takeaways as an AWS-orange accented box using a 1-cell table."""
-        if self.style == "meridian":
-            self._render_key_takeaways_plain(bq_lines)
-            return
         tbl = self.doc.add_table(rows=1, cols=1)
         tbl.alignment = 1  # center
         set_table_full_width(tbl)
@@ -796,7 +626,7 @@ class StyledDocxBuilder:
                 first = False
                 title = "Key Takeaways" if self.lang == "en" else "핵심 요약"
                 r = p.add_run(title)
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(13)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
@@ -808,7 +638,7 @@ class StyledDocxBuilder:
                 p = cell.add_paragraph()
                 first = False
                 r = p.add_run("  \u2022  ")
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(11)
                 r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
                 r.font.bold = True
@@ -846,58 +676,6 @@ class StyledDocxBuilder:
 
         p = self.doc.add_paragraph()
         set_paragraph_spacing(p, before=0, after=0)
-
-    def _render_mermaid_block(self, code_lines):
-        """Render a mermaid block as a centered, embedded image.
-
-        Returns True if the image was embedded, False if the caller should fall
-        back to rendering the mermaid source as a code box.
-        """
-        source = "\n".join(code_lines).strip()
-        if not source:
-            return False
-        self._mermaid_count += 1
-        png = render_mermaid_to_png(
-            source, self._get_mermaid_workdir(), self._mermaid_count)
-        if not png:
-            return False
-        try:
-            from PIL import Image  # optional; used only to size the image
-            with Image.open(png) as im:
-                px_w, px_h = im.size
-        except Exception:  # noqa: BLE001 - Pillow optional
-            px_w, px_h = (0, 0)
-
-        section = self.doc.sections[0]
-        usable_emu = section.page_width - section.left_margin - section.right_margin
-        usable_cm = usable_emu / 360000.0
-        # Keep diagrams to ~85% of text width so they read as figures, and cap
-        # height so a tall flowchart doesn't overflow a page.
-        target_cm = usable_cm * 0.85
-        width_cm = target_cm
-        if px_w and px_h:
-            # 96 dpi baseline; -s scale in the renderer only sharpens, not resizes
-            native_cm = px_w / 96.0 * 2.54 / 3.0  # scale=3 was used
-            width_cm = min(target_cm, native_cm)
-            max_h_cm = 20.0  # leave room within an A4/Letter text column
-            if width_cm * (px_h / px_w) > max_h_cm:
-                width_cm = max_h_cm * (px_w / px_h)
-
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_paragraph_spacing(p, before=6, after=2)
-        run = p.add_run()
-        try:
-            run.add_picture(png, width=Cm(width_cm))
-        except Exception as e:  # noqa: BLE001 - never break the build on embed
-            sys.stderr.write(f"  (mermaid embed failed: {e}; falling back)\n")
-            # roll back the empty paragraph we just added
-            p._element.getparent().remove(p._element)
-            return False
-        # trailing spacer
-        sp = self.doc.add_paragraph()
-        set_paragraph_spacing(sp, before=0, after=4)
-        return True
 
     def _render_code_block(self, code_lines, lang=""):
         """Render a fenced code block as a shaded monospace box."""
@@ -976,14 +754,12 @@ class StyledDocxBuilder:
         set_table_full_width(tbl)
 
         # Style header row
-        header_text_color = MERIDIAN_TEXT if self.style == "meridian" else WHITE
-        header_bg = MERIDIAN_TABLE_HEADER_BG if self.style == "meridian" else TABLE_HEADER_BG
         for j, val in enumerate(rows_raw[0]):
             cell = tbl.cell(0, j)
             cell.text = ""
             p = cell.paragraphs[0]
-            add_formatted_text(p, val, base_size=10, base_bold=True, base_color=header_text_color)
-            set_cell_shading(cell, header_bg)
+            add_formatted_text(p, val, base_size=10, base_bold=True, base_color=WHITE)
+            set_cell_shading(cell, TABLE_HEADER_BG)
             cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             set_paragraph_spacing(p, before=4, after=4)
 
@@ -996,27 +772,25 @@ class StyledDocxBuilder:
 
                 val = rows_raw[i][j].strip() if j < len(rows_raw[i]) else ""
 
-                if val in PRIORITY_BADGE and self.style != "meridian":
+                if val in PRIORITY_BADGE:
                     add_badge(p, val, PRIORITY_BADGE[val])
                 else:
                     add_formatted_text(p, val, base_size=10)
 
-                if i % 2 == 0 and self.style != "meridian":
+                if i % 2 == 0:
                     set_cell_shading(cell, TABLE_ALT_ROW)
 
                 cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
                 set_paragraph_spacing(p, before=3, after=3)
 
         # Set thin borders on all cells
-        border_color = MERIDIAN_BORDER if self.style == "meridian" else "D0D0D0"
-        border_sz = "4" if self.style == "meridian" else "2"
         for row in tbl.rows:
             for cell in row.cells:
                 set_cell_borders(cell,
-                                 top=(border_sz, border_color),
-                                 bottom=(border_sz, border_color),
-                                 left=(border_sz, border_color),
-                                 right=(border_sz, border_color))
+                                 top=("2", "D0D0D0"),
+                                 bottom=("2", "D0D0D0"),
+                                 left=("2", "D0D0D0"),
+                                 right=("2", "D0D0D0"))
 
         p = self.doc.add_paragraph()
         set_paragraph_spacing(p, before=0, after=4)
@@ -1028,10 +802,10 @@ class StyledDocxBuilder:
                 p = self.doc.add_paragraph()
                 set_paragraph_spacing(p, before=2, after=2)
                 r = p.add_run(f"{nm.group(1)}.  ")
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(11)
                 r.font.bold = True
-                r.font.color.rgb = self.accent
+                r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
                 add_formatted_text(p, nm.group(2))
                 self._maybe_add_badge(p, nm.group(2))
             elif item.strip().startswith("- "):
@@ -1039,7 +813,7 @@ class StyledDocxBuilder:
                 set_paragraph_spacing(p, before=1, after=1)
                 p.paragraph_format.left_indent = Cm(1.2)
                 r = p.add_run("\u2022  ")
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(10)
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
                 add_formatted_text(p, item.strip()[2:], base_size=10)
@@ -1059,10 +833,10 @@ class StyledDocxBuilder:
 
             bullet_char = "\u2022" if indent_level == 0 else "\u25E6"
             r = p.add_run(f"  {bullet_char}  ")
-            r.font.name = BODY_FONT
+            r.font.name = "Amazon Ember"
             r.font.size = Pt(11)
             if indent_level == 0:
-                r.font.color.rgb = self.accent
+                r.font.color.rgb = RGBColor(0xFF, 0x99, 0x00)
             else:
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -1101,7 +875,7 @@ class StyledDocxBuilder:
                 label = line[:colon_idx + 1]
                 value = line[colon_idx + 1:].strip()
                 r = p.add_run(label + " ")
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(8)
                 r.font.bold = True
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
@@ -1109,14 +883,12 @@ class StyledDocxBuilder:
                                    base_color=RGBColor(0x99, 0x99, 0x99))
             else:
                 r = p.add_run(line)
-                r.font.name = BODY_FONT
+                r.font.name = "Amazon Ember"
                 r.font.size = Pt(8)
                 r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
     def _maybe_add_badge(self, paragraph, text):
         """Check badge rules and append a badge if text matches."""
-        if self.style == "meridian":
-            return
         for trigger, (label, color) in self.badge_rules.items():
             if trigger.lower() in text.lower():
                 paragraph.add_run("  ")
@@ -1124,63 +896,27 @@ class StyledDocxBuilder:
                 break
 
     def _add_footer(self):
-        """Add a footer credit line (styled per document style)."""
-        section = self.doc.sections[-1]
-        footer = section.footer
-        footer.is_linked_to_previous = False
-        fp = footer.paragraphs[0]
-
-        if self.style == "meridian":
-            self._add_meridian_footer(section, fp)
-            return
-
+        """Add a styled footer separator and credit line."""
         p = self.doc.add_paragraph()
         set_paragraph_spacing(p, before=24, after=4)
         add_paragraph_border(p, side="top", sz="4", color="D0D0D0", space="8")
 
+        section = self.doc.sections[-1]
+        footer = section.footer
+        footer.is_linked_to_previous = False
+        fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
         if self.footer_text:
             txt = self.footer_text
         else:
-            today = date.today().isoformat()  # noqa: DTZ011 - local calendar date is intended
+            today = date.today().isoformat()
             txt = f"{today}  |  Confidential"
+
         r = fp.add_run(txt)
-        r.font.name = BODY_FONT
+        r.font.name = "Amazon Ember"
         r.font.size = Pt(8)
         r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
-    def _add_meridian_footer(self, section, fp):
-        """Meridian footer: 'Amazon Confidential' left, 'Page X of Y' right."""
-        usable = section.page_width - section.left_margin - section.right_margin
-        fp.paragraph_format.tab_stops.add_tab_stop(usable, WD_TAB_ALIGNMENT.RIGHT)
-
-        left_txt = self.footer_text if self.footer_text else "Amazon Confidential"
-
-        def _style(run):
-            run.font.name = BODY_FONT
-            run.font.size = Pt(9)
-            run.font.color.rgb = MERIDIAN_TEXT
-
-        _style(fp.add_run(left_txt))
-        _style(fp.add_run("\t"))
-        _style(fp.add_run("Page "))
-        self._add_field(fp, "PAGE", _style)
-        _style(fp.add_run(" of "))
-        self._add_field(fp, "NUMPAGES", _style)
-
-    def _add_field(self, paragraph, instr, style_fn):
-        """Append a Word field (e.g. PAGE, NUMPAGES) as a styled run."""
-        run = paragraph.add_run()
-        style_fn(run)
-        r = run._r
-        begin = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="begin"/>')
-        instr_el = parse_xml(
-            f'<w:instrText {nsdecls("w")} xml:space="preserve"> {instr} </w:instrText>'
-        )
-        end = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="end"/>')
-        r.append(begin)
-        r.append(instr_el)
-        r.append(end)
 
 
 # -- Main ---------------------------------------------------------------------
@@ -1203,17 +939,14 @@ def main():
                         help="Language for badge rules and labels (default: auto-detect from filename)")
     parser.add_argument("--footer", default=None,
                         help="Custom footer text (default: auto-generated with date)")
-    parser.add_argument("-s", "--style", choices=["aws", "meridian"], default="aws",
-                        help="Document style: 'aws' (branded, default) or 'meridian' "
-                             "(classic Amazon narrative - Calibri, black & white)")
-    parser.add_argument("--margin-top", type=float, default=None,
-                        help="Top margin in cm (default: per style)")
-    parser.add_argument("--margin-bottom", type=float, default=None,
-                        help="Bottom margin in cm (default: per style)")
-    parser.add_argument("--margin-left", type=float, default=None,
-                        help="Left margin in cm (default: per style)")
-    parser.add_argument("--margin-right", type=float, default=None,
-                        help="Right margin in cm (default: per style)")
+    parser.add_argument("--margin-top", type=float, default=DEFAULT_MARGINS_CM["top"],
+                        help=f"Top margin in cm (default: {DEFAULT_MARGINS_CM['top']})")
+    parser.add_argument("--margin-bottom", type=float, default=DEFAULT_MARGINS_CM["bottom"],
+                        help=f"Bottom margin in cm (default: {DEFAULT_MARGINS_CM['bottom']})")
+    parser.add_argument("--margin-left", type=float, default=DEFAULT_MARGINS_CM["left"],
+                        help=f"Left margin in cm (default: {DEFAULT_MARGINS_CM['left']})")
+    parser.add_argument("--margin-right", type=float, default=DEFAULT_MARGINS_CM["right"],
+                        help=f"Right margin in cm (default: {DEFAULT_MARGINS_CM['right']})")
 
     args = parser.parse_args()
 
@@ -1221,15 +954,11 @@ def main():
         print("Error: -o/--output can only be used with a single input file.", file=sys.stderr)
         sys.exit(1)
 
-    if args.style == "meridian":
-        style_defaults = {"top": 1.27, "bottom": 1.27, "left": 1.27, "right": 1.27}
-    else:
-        style_defaults = dict(DEFAULT_MARGINS_CM)
     margins = {
-        "top": args.margin_top if args.margin_top is not None else style_defaults["top"],
-        "bottom": args.margin_bottom if args.margin_bottom is not None else style_defaults["bottom"],
-        "left": args.margin_left if args.margin_left is not None else style_defaults["left"],
-        "right": args.margin_right if args.margin_right is not None else style_defaults["right"],
+        "top": args.margin_top,
+        "bottom": args.margin_bottom,
+        "left": args.margin_left,
+        "right": args.margin_right,
     }
 
     for md_path in args.input:
@@ -1240,9 +969,8 @@ def main():
         out_path = args.output if args.output else os.path.splitext(md_path)[0] + ".docx"
         lang = args.lang if args.lang else detect_lang(md_path)
 
-        print(f"Generating styled Word document (lang={lang}, style={args.style})...")
-        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer,
-                                    margins=margins, style=args.style)
+        print(f"Generating styled Word document (lang={lang})...")
+        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer, margins=margins)
         builder.build(md_path, out_path)
 
     print("Done!")
