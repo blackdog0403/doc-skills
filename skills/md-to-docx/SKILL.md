@@ -33,6 +33,7 @@ Convert markdown files to styled Word documents (.docx) with AWS branding.
 /md-to-docx '<file_path>'
 /md-to-docx '<file_path>, output:report.docx'
 /md-to-docx '<file_path>, lang:ko'
+/md-to-docx '<file_path>, style:meridian'
 /md-to-docx '<file_path>, lang:ko, footer:AWS Meeting Notes | 2026-05-05 | Confidential'
 /md-to-docx '<file_path1>' '<file_path2>'
 ```
@@ -82,6 +83,7 @@ Parse user input to extract file paths and options:
 Map options to CLI flags:
 - `output:<path>` → `-o <path>`
 - `lang:en` or `lang:ko` → `-l en` or `-l ko`
+- `style:aws` or `style:meridian` → `-s aws` or `-s meridian`
 - `footer:<text>` → `--footer "<text>"`
 - `title-page:true` → `--title-page`
 - `title`, `subtitle`, `author`, `team`, `version`, `classification` → corresponding `--<name> "<value>"` flags; any supplied metadata automatically enables the title page
@@ -98,21 +100,43 @@ If no language is specified in the initial request, ask the generated-label lang
 ### Core Options
 - `-o` / `--output`: Output .docx file path (default: same name as input with .docx extension)
 - `-l` / `--lang`: Language for badge rules and labels — `en` or `ko` (default: `en`)
-- `--footer`: Footer text; `{date}` expands at generation time (default: `{date} | Confidential`)
+- `-s` / `--style`: Document style — `aws` (branded, default) or `meridian` (classic Amazon narrative)
+- `--footer`: Footer text; `{date}` expands at generation time (default: `{date} | Confidential`; `Amazon Confidential` under `-s meridian`)
 - `--title-page`: Add a title page. `--title`, `--subtitle`, `--author`, `--team`, `--version`, and `--classification` populate it; metadata flags enable the page automatically. Title defaults to the first H1 or filename.
 - `--toc`: Add a Word table-of-contents field covering Heading 1 through Heading 3. Word-compatible editors refresh it when the file opens.
-- `--page-numbers`: Append auto-updating `Page X of Y` fields to the footer.
+- `--page-numbers`: Append auto-updating `Page X of Y` fields to the footer. `-s meridian` already places them in its footer.
 - `--header`, `--logo`: Add header text and/or a 2.5 cm-wide image. Supported image formats depend on `python-docx` (PNG, JPEG, GIF, BMP, or TIFF).
 - `--page-size`: `letter`, `a4`, or `legal` (default: `letter`)
 - `--orientation`: `portrait` or `landscape` (default: `portrait`)
-- `--margin-top`, `--margin-bottom`, `--margin-left`, `--margin-right`: Page margins in cm. Defaults: top/bottom 2.54, left/right 2.0.
+- `--margin-top`, `--margin-bottom`, `--margin-left`, `--margin-right`: Page margins in cm. Defaults come from the style — `aws`: top/bottom 2.54, left/right 2.0 · `meridian`: 1.27 all round
+
+### Styles
+
+| | `aws` (default) | `meridian` |
+|---|---|---|
+| Use for | Customer-facing reports, decks' companion docs | 1-pagers, 6-pagers, PR/FAQ — anything read as a narrative |
+| Font | Amazon Ember 11pt | Calibri 10.5pt, justified |
+| Color | AWS Orange accents, navy table headers | Pure black & white, gray table headers |
+| Headings | Large H1/H2 with orange rule | Body-size bold with a thin black rule |
+| Badges | Status + priority badges | Suppressed (plain text) |
+| Footer | Centered date · Confidential | "Amazon Confidential" left · "Page X of Y" right |
+| Margins | 2.54 / 2.0 cm | 1.27 cm all round |
+
+Pick `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, a black-and-white internal document, or the equivalent request in Korean. Otherwise stay on `aws`.
+
+### Mermaid Diagrams
+
+A fenced ` ```mermaid ` block is rendered as an embedded, centered image (mermaid-cli via `npx`, Korean-safe font stack, high-DPI PNG). If `npx` is unavailable or rendering fails, the block silently falls back to a monospace code box — conversion never breaks because of a diagram.
+
+To get rendered diagrams, `npx` (Node.js) must be on PATH; the first run downloads `@mermaid-js/mermaid-cli` and can take a minute.
 
 ### Styling Features
-- **AWS-branded**: Calibri 11pt font, AWS Orange (#FF9900) accents
+- **AWS-branded**: Amazon Ember 11pt font, AWS Orange (#FF9900) accents
 - **Headings**: H1-H6 support with orange underline on H2
 - **Key Takeaways**: Orange-accented callout box (auto-detected from blockquotes)
 - **Blockquotes**: General blockquotes rendered with gray left border
 - **Code blocks**: Fenced code blocks rendered as monospace shaded boxes
+- **Mermaid**: ` ```mermaid ` blocks rendered as embedded diagrams (falls back to a code box)
 - **Tables**: Dark navy header, alternating row colors, thin borders
 - **Badges**: Auto-detected status badges (ON ROADMAP, NOT TODAY, LIMITED, LIMITATION)
 - **Priority badges**: High (red), Medium (orange), Low (green) in table cells
@@ -141,6 +165,7 @@ If the user explicitly asks to convert both English and Korean versions, locate 
 /md-to-docx 'meeting-notes.md'                                          # Preflight asks; `default` selects English
 /md-to-docx 'meeting-notes.md, output:final-report.docx'                # Custom output path
 /md-to-docx 'meeting-notes.md, lang:ko'                                 # Force Korean mode
+/md-to-docx 'one-pager.md, style:meridian'                              # Amazon narrative style
 /md-to-docx 'meeting-notes.md, footer:Team Meeting | May 2026'          # Custom footer
 /md-to-docx 'report.md' 'report-ko.md'                                  # Convert both versions
 ```
@@ -148,3 +173,4 @@ If the user explicitly asks to convert both English and Korean versions, locate 
 ## Prerequisites
 - Bundled helper: `scripts/generate_styled_docx.py`
 - Runtime dependency: `python-docx`; `setup/install-cli.sh` installs it in a private environment
+- Optional: `npx` (Node.js) for rendering ` ```mermaid ` blocks as diagrams

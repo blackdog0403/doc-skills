@@ -169,9 +169,13 @@ class PptxLanguageSafetyTests(unittest.TestCase):
 
 class InstructionSafetyTests(unittest.TestCase):
     def test_every_skill_variant_has_output_language_guardrail(self):
-        skill_files = sorted((ROOT / "skills").glob("*/SKILL.md"))
-        skill_files += sorted((ROOT / "quick").glob("*/SKILL.md"))
-        self.assertEqual(len(skill_files), 8)
+        agent_skills = sorted((ROOT / "skills").glob("*/SKILL.md"))
+        quick_skills = sorted((ROOT / "quick").glob("*/SKILL.md"))
+        # Guard the globs without pinning a total: a new skill must be covered by
+        # this test, not silently raise the expected count.
+        self.assertTrue(agent_skills, "no skills/*/SKILL.md found")
+        self.assertTrue(quick_skills, "no quick/*/SKILL.md found")
+        skill_files = agent_skills + quick_skills
         for path in skill_files:
             with self.subTest(path=path):
                 text = path.read_text()

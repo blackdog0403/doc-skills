@@ -110,8 +110,10 @@ class LanguagePreflightInstructionTests(unittest.TestCase):
         instructions = (ROOT / "quick" / "md-to-docx" / "SKILL.md").read_text(
             encoding="utf-8"
         )
+        # Slice to the next input, not specifically `footer`: inputs added between
+        # `language` and `footer` must not drag their own `default:` into this check.
         language_input = instructions.split("  - name: language", 1)[1].split(
-            "  - name: footer", 1
+            "\n  - name:", 1
         )[0]
         self.assertIn("required: true", language_input)
         self.assertNotIn("default:", language_input)

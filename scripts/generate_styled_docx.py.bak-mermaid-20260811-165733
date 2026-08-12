@@ -9,22 +9,17 @@ Usage:
 """
 
 import argparse
-import atexit
 import os
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
-from datetime import datetime, timezone
+from datetime import date
 
 from docx import Document
-from docx.enum.section import WD_ORIENT
-from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
-from docx.oxml import OxmlElement, parse_xml
-from docx.oxml.ns import nsdecls, qn
-from docx.shared import Cm, Pt, RGBColor
+from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.oxml.ns import qn, nsdecls
+from docx.oxml import parse_xml
 
 # === Colors ===
 AWS_ORANGE = "FF9900"
@@ -244,7 +239,6 @@ def add_hyperlink(paragraph, text, url, font_name=None, font_size=11):
     if font_name is None:
         font_name = BODY_FONT
     from xml.sax.saxutils import escape as xml_escape
-
     from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
     part = paragraph.part
@@ -309,131 +303,24 @@ PRIORITY_BADGE = {
 }
 
 
-# -- Mermaid rendering (optional; falls back to a code box on any failure) ----
-
-# Font stack applied inside rendered SVG/PNG so Korean glyphs don't break.
-_MERMAID_FONT_STACK = (
-    '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", '
-    '"Nanum Gothic", -apple-system, "Segoe UI", sans-serif'
-)
-_MERMAID_CSS = (
-    f"svg {{ font-family: {_MERMAID_FONT_STACK}; }}\n"
-    ".nodeLabel, .edgeLabel, .titleText, .taskText, .sectionTitle, "
-    f"text, span, div, p {{ font-family: {_MERMAID_FONT_STACK} !important; }}\n"
-)
-
-# mermaid-cli is only probed once per process.
-_MERMAID_CLI_CHECKED = False
-_MERMAID_CLI_AVAILABLE = False
-
-
-def mermaid_cli_available():
-    """True if npx is on PATH so mermaid-cli can be invoked. Probed once."""
-    global _MERMAID_CLI_CHECKED, _MERMAID_CLI_AVAILABLE
-    if not _MERMAID_CLI_CHECKED:
-        _MERMAID_CLI_CHECKED = True
-        _MERMAID_CLI_AVAILABLE = shutil.which("npx") is not None
-    return _MERMAID_CLI_AVAILABLE
-
-
-def render_mermaid_to_png(source, workdir, index, scale=3):
-    """Render one mermaid diagram to a PNG. Returns the file path, or None on failure.
-
-    Rendering to a high-scale PNG keeps the diagram crisp when Word rescales it.
-    Any failure (no npx, mmdc error, timeout) returns None so the caller can
-    fall back to rendering the mermaid source as a code box.
-    """
-    if not mermaid_cli_available():
-        return None
-    try:
-        css = os.path.join(workdir, "mermaid.css")
-        if not os.path.exists(css):
-            with open(css, "w", encoding="utf-8") as fh:
-                fh.write(_MERMAID_CSS)
-        mmd = os.path.join(workdir, f"fig{index}.mmd")
-        png = os.path.join(workdir, f"fig{index}.png")
-        with open(mmd, "w", encoding="utf-8") as fh:
-            fh.write(source + "\n")
-        proc = subprocess.run(
-            ["npx", "-y", "-p", "@mermaid-js/mermaid-cli", "mmdc",
-             "-i", mmd, "-o", png,
-             "--cssFile", css, "-b", "white", "-s", str(scale)],
-            capture_output=True, text=True, timeout=180, check=False,
-        )
-        if os.path.exists(png) and os.path.getsize(png) > 0:
-            return png
-        detail = proc.stderr[-500:] if proc.stderr else ""
-        sys.stderr.write(
-            f"  (mermaid {index} render failed; falling back to code box)\n{detail}\n")
-    except Exception as e:  # noqa: BLE001 - never let a diagram break the build
-        sys.stderr.write(f"  (mermaid {index} render error: {e}; falling back)\n")
-    return None
-
-
 # -- Document builder ---------------------------------------------------------
 
 DEFAULT_MARGINS_CM = {"top": 2.54, "bottom": 2.54, "left": 2.0, "right": 2.0}
-PAGE_SIZES_CM = {
-    "letter": (21.59, 27.94),
-    "a4": (21.0, 29.7),
-    "legal": (21.59, 35.56),
-}
 
 
 class StyledDocxBuilder:
-    def __init__(
-        self,
-        lang="en",
-        footer_text=None,
-        margins=None,
-        style="aws",
-        page_size="letter",
-        orientation="portrait",
-        title_page=False,
-        title=None,
-        subtitle=None,
-        author=None,
-        team=None,
-        version=None,
-        classification=None,
-        toc=False,
-        page_numbers=False,
-        header_text=None,
-        logo_path=None,
-    ):
+    def __init__(self, lang="en", footer_text=None, margins=None, style="aws"):
         self.doc = Document()
         self.lang = lang
         self.style = style
         self.footer_text = footer_text
         self.margins = {**DEFAULT_MARGINS_CM, **(margins or {})}
-        self.page_size = page_size
-        self.orientation = orientation
-        self.title_page = title_page
-        self.title = title
-        self.subtitle = subtitle
-        self.author = author
-        self.team = team
-        self.version = version
-        self.classification = classification
-        self.toc = toc
-        self.page_numbers = page_numbers
-        self.header_text = header_text
-        self.logo_path = logo_path
         self.badge_rules = BADGE_RULES_EN if lang == "en" else BADGE_RULES_KO
         self.accent = MERIDIAN_TEXT if style == "meridian" else RGBColor(0xFF, 0x99, 0x00)
         self.footnotes = {}
         self.extra_notes = []
-        # Mermaid diagram rendering (lazy temp dir, per-doc counter)
-        self._mermaid_workdir = None
-        self._mermaid_count = 0
         configure_theme(style)
         self._setup_styles()
-
-    def _get_mermaid_workdir(self):
-        if self._mermaid_workdir is None:
-            self._mermaid_workdir = tempfile.mkdtemp(prefix="docx-mermaid-")
-            atexit.register(shutil.rmtree, self._mermaid_workdir, ignore_errors=True)
-        return self._mermaid_workdir
 
     def _setup_styles(self):
         normal = self.doc.styles["Normal"]
@@ -449,23 +336,11 @@ class StyledDocxBuilder:
             pf.space_after = Pt(6)
             pf.line_spacing = 1.15
 
-        width_cm, height_cm = PAGE_SIZES_CM[self.page_size]
-        if self.orientation == "landscape":
-            width_cm, height_cm = height_cm, width_cm
-
         for section in self.doc.sections:
-            section.orientation = (
-                WD_ORIENT.LANDSCAPE
-                if self.orientation == "landscape"
-                else WD_ORIENT.PORTRAIT
-            )
-            section.page_width = Cm(width_cm)
-            section.page_height = Cm(height_cm)
             section.top_margin = Cm(self.margins["top"])
             section.bottom_margin = Cm(self.margins["bottom"])
             section.left_margin = Cm(self.margins["left"])
             section.right_margin = Cm(self.margins["right"])
-            section.different_first_page_header_footer = self.title_page
 
         if self.style == "meridian":
             # Section headers are body-size bold black - no large heading sizes
@@ -494,7 +369,6 @@ class StyledDocxBuilder:
             raw = f.read()
         raw = self._preprocess_html(raw)
         lines = raw.splitlines()
-        self._add_front_matter(lines, md_path)
         self.footnotes, self.extra_notes, skip_lines = self._extract_footnotes(lines)
         i = 0
         in_code_block = False
@@ -516,14 +390,8 @@ class StyledDocxBuilder:
                     i += 1
                     continue
                 else:
-                    # End of code block — render it.
-                    # A mermaid block becomes an embedded image when mermaid-cli
-                    # is available; otherwise it falls back to the code box.
-                    if code_block_lang.lower() == "mermaid" and \
-                            self._render_mermaid_block(code_block_lines):
-                        pass
-                    else:
-                        self._render_code_block(code_block_lines, code_block_lang)
+                    # End of code block — render it
+                    self._render_code_block(code_block_lines, code_block_lang)
                     in_code_block = False
                     code_block_lines = []
                     code_block_lang = ""
@@ -608,7 +476,10 @@ class StyledDocxBuilder:
                 items = []
                 while i < len(lines):
                     nm2 = re.match(r"^(\d+)\.\s+(.+)$", lines[i])
-                    if nm2 or lines[i].startswith("   "):
+                    if nm2:
+                        items.append(lines[i])
+                        i += 1
+                    elif lines[i].startswith("   "):
                         items.append(lines[i])
                         i += 1
                     else:
@@ -656,180 +527,11 @@ class StyledDocxBuilder:
             # blank line
             i += 1
 
-        # -- Endnotes + Header/Footer --
+        # -- Endnotes + Footer --
         self._render_endnotes()
-        self._add_header()
         self._add_footer()
         self.doc.save(out_path)
         print(f"  -> {out_path}")
-
-    def _plain_title(self, lines, md_path):
-        """Select a title from CLI metadata, the first body H1, or filename."""
-        if self.title:
-            return self.title
-        in_code_block = False
-        for line in lines:
-            if re.match(r"^`{3,}", line.strip()):
-                in_code_block = not in_code_block
-                continue
-            if in_code_block:
-                continue
-            match = re.match(r"^#\s+(.+)$", line)
-            if match:
-                title = match.group(1).strip()
-                title = re.sub(r"\[([^]]+)]\([^)]+\)", r"\1", title)
-                title = re.sub(r"`([^`]+)`", r"\1", title)
-                title = re.sub(r"\*\*([^*]+)\*\*", r"\1", title)
-                title = re.sub(r"__([^_]+)__", r"\1", title)
-                title = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", title)
-                title = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", title)
-                return title
-        stem = os.path.splitext(os.path.basename(md_path))[0]
-        return stem.replace("-", " ").replace("_", " ").title()
-
-    def _set_core_properties(self, title):
-        """Mirror supplied title-page metadata into standard DOCX properties."""
-        properties = self.doc.core_properties
-        properties.title = title
-        if self.subtitle:
-            properties.subject = self.subtitle
-        if self.author:
-            properties.author = self.author
-        if self.team:
-            properties.category = self.team
-        keywords = []
-        if self.version:
-            keywords.append(f"version:{self.version}")
-        if self.classification:
-            keywords.append(f"classification:{self.classification}")
-            properties.comments = self.classification
-        if keywords:
-            properties.keywords = "; ".join(keywords)
-
-    def _add_title_page(self, lines, md_path):
-        """Render a centered title page and metadata block."""
-        title = self._plain_title(lines, md_path)
-        self._set_core_properties(title)
-
-        spacer = self.doc.add_paragraph()
-        set_paragraph_spacing(spacer, before=72, after=24)
-
-        paragraph = self.doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = paragraph.add_run(title)
-        run.font.name = "Amazon Ember"
-        run.font.size = Pt(28)
-        run.font.bold = True
-        run.font.color.rgb = DARK_GRAY
-        add_paragraph_border(paragraph, sz="10", color=AWS_ORANGE, space="12")
-
-        if self.subtitle:
-            paragraph = self.doc.add_paragraph()
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = paragraph.add_run(self.subtitle)
-            run.font.name = "Amazon Ember"
-            run.font.size = Pt(15)
-            run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            set_paragraph_spacing(paragraph, before=8, after=24)
-
-        labels = {
-            "en": ("Author", "Team", "Version", "Classification"),
-            "ko": ("작성자", "팀", "버전", "분류"),
-        }[self.lang]
-        metadata = zip(
-            labels,
-            (self.author, self.team, self.version, self.classification),
-        )
-        for label, value in metadata:
-            if not value:
-                continue
-            paragraph = self.doc.add_paragraph()
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            label_run = paragraph.add_run(f"{label}: ")
-            label_run.font.name = "Amazon Ember"
-            label_run.font.size = Pt(10)
-            label_run.font.bold = True
-            label_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            value_run = paragraph.add_run(value)
-            value_run.font.name = "Amazon Ember"
-            value_run.font.size = Pt(10)
-            value_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-
-        self.doc.add_page_break()
-
-    def _add_word_field(self, paragraph, instruction, placeholder):
-        """Append a Word field code with readable fallback text."""
-        run = paragraph.add_run()
-        begin = OxmlElement("w:fldChar")
-        begin.set(qn("w:fldCharType"), "begin")
-        begin.set(qn("w:dirty"), "true")
-        instr = OxmlElement("w:instrText")
-        instr.set(qn("xml:space"), "preserve")
-        instr.text = instruction
-        separate = OxmlElement("w:fldChar")
-        separate.set(qn("w:fldCharType"), "separate")
-        text = OxmlElement("w:t")
-        text.text = placeholder
-        end = OxmlElement("w:fldChar")
-        end.set(qn("w:fldCharType"), "end")
-        run._r.extend((begin, instr, separate, text, end))
-        return run
-
-    def _request_field_updates(self):
-        """Ask Word-compatible editors to refresh TOC and page fields on open."""
-        settings = self.doc.settings._element
-        update = settings.find(qn("w:updateFields"))
-        if update is None:
-            update = OxmlElement("w:updateFields")
-            settings.append(update)
-        update.set(qn("w:val"), "true")
-
-    def _add_toc(self):
-        """Add a dynamic table of contents for Heading 1 through Heading 3."""
-        paragraph = self.doc.add_paragraph()
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        run = paragraph.add_run("Table of Contents" if self.lang == "en" else "목차")
-        run.font.name = "Amazon Ember"
-        run.font.size = Pt(20)
-        run.font.bold = True
-        run.font.color.rgb = DARK_GRAY
-        add_paragraph_border(paragraph, sz="8", color=AWS_ORANGE, space="6")
-
-        field_paragraph = self.doc.add_paragraph()
-        self._add_word_field(
-            field_paragraph,
-            ' TOC \\o "1-3" \\h \\z \\u ',
-            "Update this field to populate the table of contents.",
-        )
-        self._request_field_updates()
-        self.doc.add_page_break()
-
-    def _add_front_matter(self, lines, md_path):
-        """Add selected title-page and TOC content before the Markdown body."""
-        if self.title_page:
-            self._add_title_page(lines, md_path)
-        if self.toc:
-            self._add_toc()
-
-    def _add_header(self):
-        """Add optional text and/or a logo to the default page header."""
-        if not self.header_text and not self.logo_path:
-            return
-        for section in self.doc.sections:
-            header = section.header
-            header.is_linked_to_previous = False
-            paragraph = header.paragraphs[0]
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            if self.logo_path:
-                picture_run = paragraph.add_run()
-                picture_run.add_picture(self.logo_path, width=Cm(2.5))
-            if self.header_text:
-                if self.logo_path:
-                    paragraph.add_run("  ")
-                run = paragraph.add_run(self.header_text)
-                run.font.name = "Amazon Ember"
-                run.font.size = Pt(9)
-                run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
 
     def _preprocess_html(self, text):
         """Convert common GitHub-README HTML to markdown equivalents and strip the rest.
@@ -976,7 +678,8 @@ class StyledDocxBuilder:
             line = line.strip()
             if not line or "Key Takeaways" in line or "핵심 요약" in line:
                 continue
-            line = line.removeprefix("- ")
+            if line.startswith("- "):
+                line = line[2:]
             bp = self.doc.add_paragraph()
             bp.paragraph_format.left_indent = Cm(0.6)
             set_paragraph_spacing(bp, before=1, after=1)
@@ -1066,58 +769,6 @@ class StyledDocxBuilder:
 
         p = self.doc.add_paragraph()
         set_paragraph_spacing(p, before=0, after=0)
-
-    def _render_mermaid_block(self, code_lines):
-        """Render a mermaid block as a centered, embedded image.
-
-        Returns True if the image was embedded, False if the caller should fall
-        back to rendering the mermaid source as a code box.
-        """
-        source = "\n".join(code_lines).strip()
-        if not source:
-            return False
-        self._mermaid_count += 1
-        png = render_mermaid_to_png(
-            source, self._get_mermaid_workdir(), self._mermaid_count)
-        if not png:
-            return False
-        try:
-            from PIL import Image  # optional; used only to size the image
-            with Image.open(png) as im:
-                px_w, px_h = im.size
-        except Exception:  # noqa: BLE001 - Pillow optional
-            px_w, px_h = (0, 0)
-
-        section = self.doc.sections[0]
-        usable_emu = section.page_width - section.left_margin - section.right_margin
-        usable_cm = usable_emu / 360000.0
-        # Keep diagrams to ~85% of text width so they read as figures, and cap
-        # height so a tall flowchart doesn't overflow a page.
-        target_cm = usable_cm * 0.85
-        width_cm = target_cm
-        if px_w and px_h:
-            # 96 dpi baseline; -s scale in the renderer only sharpens, not resizes
-            native_cm = px_w / 96.0 * 2.54 / 3.0  # scale=3 was used
-            width_cm = min(target_cm, native_cm)
-            max_h_cm = 20.0  # leave room within an A4/Letter text column
-            if width_cm * (px_h / px_w) > max_h_cm:
-                width_cm = max_h_cm * (px_w / px_h)
-
-        p = self.doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_paragraph_spacing(p, before=6, after=2)
-        run = p.add_run()
-        try:
-            run.add_picture(png, width=Cm(width_cm))
-        except Exception as e:  # noqa: BLE001 - never break the build on embed
-            sys.stderr.write(f"  (mermaid embed failed: {e}; falling back)\n")
-            # roll back the empty paragraph we just added
-            p._element.getparent().remove(p._element)
-            return False
-        # trailing spacer
-        sp = self.doc.add_paragraph()
-        set_paragraph_spacing(sp, before=0, after=4)
-        return True
 
     def _render_code_block(self, code_lines, lang=""):
         """Render a fenced code block as a shaded monospace box."""
@@ -1343,15 +994,8 @@ class StyledDocxBuilder:
                 add_badge(paragraph, label, color)
                 break
 
-    def _resolved_footer_text(self, default=None):
-        """Return the selected footer, expanding the documented date token."""
-        today = datetime.now(timezone.utc).date().isoformat()
-        if self.footer_text is None:
-            return default if default is not None else f"{today}  |  Confidential"
-        return self.footer_text.replace("{date}", today)
-
     def _add_footer(self):
-        """Add the user-selected footer to every generated document."""
+        """Add a footer credit line (styled per document style)."""
         section = self.doc.sections[-1]
         footer = section.footer
         footer.is_linked_to_previous = False
@@ -1366,58 +1010,59 @@ class StyledDocxBuilder:
         add_paragraph_border(p, side="top", sz="4", color="D0D0D0", space="8")
 
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        footer_text = self._resolved_footer_text()
-        if footer_text:
-            run = fp.add_run(footer_text)
-            run.font.name = BODY_FONT
-            run.font.size = Pt(8)
-            run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
-        if self.page_numbers:
-            if footer_text:
-                separator = fp.add_run("  |  ")
-                separator.font.name = BODY_FONT
-                separator.font.size = Pt(8)
-                separator.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            label = "Page " if self.lang == "en" else "페이지 "
-            of_label = " of " if self.lang == "en" else " / "
-            prefix = fp.add_run(label)
-            prefix.font.name = BODY_FONT
-            prefix.font.size = Pt(8)
-            prefix.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            page_run = self._add_word_field(fp, " PAGE ", "1")
-            between = fp.add_run(of_label)
-            between.font.name = BODY_FONT
-            between.font.size = Pt(8)
-            between.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            count_run = self._add_word_field(fp, " NUMPAGES ", "1")
-            for field_run in (page_run, count_run):
-                field_run.font.name = BODY_FONT
-                field_run.font.size = Pt(8)
-                field_run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            self._request_field_updates()
+        if self.footer_text:
+            txt = self.footer_text
+        else:
+            today = date.today().isoformat()
+            txt = f"{today}  |  Confidential"
+        r = fp.add_run(txt)
+        r.font.name = BODY_FONT
+        r.font.size = Pt(8)
+        r.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
     def _add_meridian_footer(self, section, fp):
         """Meridian footer: 'Amazon Confidential' left, 'Page X of Y' right."""
         usable = section.page_width - section.left_margin - section.right_margin
         fp.paragraph_format.tab_stops.add_tab_stop(usable, WD_TAB_ALIGNMENT.RIGHT)
 
+        left_txt = self.footer_text if self.footer_text else "Amazon Confidential"
+
         def _style(run):
             run.font.name = BODY_FONT
             run.font.size = Pt(9)
             run.font.color.rgb = MERIDIAN_TEXT
-            return run
 
-        _style(fp.add_run(self._resolved_footer_text("Amazon Confidential")))
+        _style(fp.add_run(left_txt))
         _style(fp.add_run("\t"))
         _style(fp.add_run("Page "))
-        _style(self._add_word_field(fp, " PAGE ", "1"))
+        self._add_field(fp, "PAGE", _style)
         _style(fp.add_run(" of "))
-        _style(self._add_word_field(fp, " NUMPAGES ", "1"))
-        self._request_field_updates()
+        self._add_field(fp, "NUMPAGES", _style)
+
+    def _add_field(self, paragraph, instr, style_fn):
+        """Append a Word field (e.g. PAGE, NUMPAGES) as a styled run."""
+        run = paragraph.add_run()
+        style_fn(run)
+        r = run._r
+        begin = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="begin"/>')
+        instr_el = parse_xml(
+            f'<w:instrText {nsdecls("w")} xml:space="preserve"> {instr} </w:instrText>'
+        )
+        end = parse_xml(f'<w:fldChar {nsdecls("w")} w:fldCharType="end"/>')
+        r.append(begin)
+        r.append(instr_el)
+        r.append(end)
 
 
 # -- Main ---------------------------------------------------------------------
+
+def detect_lang(md_path):
+    """Auto-detect language from filename convention (-ko suffix)."""
+    base = os.path.splitext(os.path.basename(md_path))[0]
+    if base.endswith("-ko"):
+        return "ko"
+    return "en"
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1425,32 +1070,13 @@ def main():
     )
     parser.add_argument("input", nargs="+", help="Input markdown file path(s)")
     parser.add_argument("-o", "--output", help="Output .docx file path (only valid with single input file)")
-    parser.add_argument("-l", "--lang", choices=["en", "ko"], default="en",
-                        help="Language for badge rules and labels (default: en; Korean must be explicit)")
+    parser.add_argument("-l", "--lang", choices=["en", "ko"], default=None,
+                        help="Language for badge rules and labels (default: auto-detect from filename)")
     parser.add_argument("--footer", default=None,
-                        help="Footer text; {date} expands to today's UTC date "
-                             "(default: {date} | Confidential; 'Amazon Confidential' for -s meridian)")
+                        help="Custom footer text (default: auto-generated with date)")
     parser.add_argument("-s", "--style", choices=["aws", "meridian"], default="aws",
                         help="Document style: 'aws' (branded, default) or 'meridian' "
                              "(classic Amazon narrative - Calibri, black & white)")
-    parser.add_argument("--title-page", action="store_true",
-                        help="Add a title page; metadata options also enable it")
-    parser.add_argument("--title", help="Title-page title (default: first H1 or filename)")
-    parser.add_argument("--subtitle", help="Title-page subtitle")
-    parser.add_argument("--author", help="Title-page author and DOCX author property")
-    parser.add_argument("--team", help="Title-page team and DOCX category property")
-    parser.add_argument("--version", help="Title-page document version")
-    parser.add_argument("--classification", help="Title-page classification")
-    parser.add_argument("--toc", action="store_true",
-                        help="Add an auto-updating table of contents for headings 1-3")
-    parser.add_argument("--page-numbers", action="store_true",
-                        help="Append Page X of Y fields to the footer")
-    parser.add_argument("--header", help="Header text")
-    parser.add_argument("--logo", help="Path to a PNG, JPEG, GIF, BMP, or TIFF header logo")
-    parser.add_argument("--page-size", choices=sorted(PAGE_SIZES_CM), default="letter",
-                        help="Page size (default: letter)")
-    parser.add_argument("--orientation", choices=["portrait", "landscape"], default="portrait",
-                        help="Page orientation (default: portrait)")
     parser.add_argument("--margin-top", type=float, default=None,
                         help="Top margin in cm (default: per style)")
     parser.add_argument("--margin-bottom", type=float, default=None,
@@ -1465,9 +1091,6 @@ def main():
     if args.output and len(args.input) > 1:
         print("Error: -o/--output can only be used with a single input file.", file=sys.stderr)
         sys.exit(1)
-    if args.logo and not os.path.isfile(args.logo):
-        print(f"Error: Logo file not found: {args.logo}", file=sys.stderr)
-        sys.exit(1)
 
     if args.style == "meridian":
         style_defaults = {"top": 1.27, "bottom": 1.27, "left": 1.27, "right": 1.27}
@@ -1479,16 +1102,6 @@ def main():
         "left": args.margin_left if args.margin_left is not None else style_defaults["left"],
         "right": args.margin_right if args.margin_right is not None else style_defaults["right"],
     }
-    metadata_values = (
-        args.title,
-        args.subtitle,
-        args.author,
-        args.team,
-        args.version,
-        args.classification,
-    )
-    title_page = args.title_page or any(metadata_values)
-    logo_path = os.path.abspath(args.logo) if args.logo else None
 
     for md_path in args.input:
         if not os.path.isfile(md_path):
@@ -1496,28 +1109,11 @@ def main():
             sys.exit(1)
 
         out_path = args.output if args.output else os.path.splitext(md_path)[0] + ".docx"
-        lang = args.lang
+        lang = args.lang if args.lang else detect_lang(md_path)
 
         print(f"Generating styled Word document (lang={lang}, style={args.style})...")
-        builder = StyledDocxBuilder(
-            lang=lang,
-            footer_text=args.footer,
-            margins=margins,
-            style=args.style,
-            page_size=args.page_size,
-            orientation=args.orientation,
-            title_page=title_page,
-            title=args.title,
-            subtitle=args.subtitle,
-            author=args.author,
-            team=args.team,
-            version=args.version,
-            classification=args.classification,
-            toc=args.toc,
-            page_numbers=args.page_numbers,
-            header_text=args.header,
-            logo_path=logo_path,
-        )
+        builder = StyledDocxBuilder(lang=lang, footer_text=args.footer,
+                                    margins=margins, style=args.style)
         builder.build(md_path, out_path)
 
     print("Done!")
