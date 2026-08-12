@@ -1,7 +1,7 @@
 ---
 name: translate-pptx
 display_name: Translate PPTX
-description: "Translate PowerPoint presentations between languages natively inside Quick — no external dependencies. The agent IS the translator (Claude). Activate when user says 'translate pptx', 'pptx 번역', 'translate this presentation', 'translate slides', or asks to translate any .pptx file between languages."
+description: "Translate PowerPoint presentations between languages natively inside Quick with no external dependencies. The agent performs the translation directly. Activate for requests such as 'translate pptx', 'translate this presentation', or 'translate slides'. Equivalent requests written in Korean are also supported."
 icon: "🌐"
 trigger: translate pptx
 inputs:
@@ -36,6 +36,12 @@ Translates a PowerPoint (.pptx) file from one language to another **entirely ins
 - Same quality — this IS Claude doing the translation
 - Better context — can see the full slide context when translating (not just isolated paragraphs)
 - Review pass with human-in-the-loop — shows remaining issues and lets user decide
+
+## Output Language Safety
+
+- The explicit target language is the sole authority for generated text; source language, trigger phrases, and examples must not override it.
+- When the target is not Korean, never generate or retain Korean text unless the user explicitly asks to preserve specific original-script text.
+- Transliterate non-Latin names into the target script by default. Retain original-script names only after an explicit user request.
 
 ## Workflow
 
@@ -86,9 +92,9 @@ This is the core step where the agent translates. Process slide-by-slide, up to 
 
 For each batch of paragraphs, translate them following these rules:
 - Produce natural, fluent target language — not word-by-word
-- Localize date formats (e.g. '2024년 10월' → 'October 2024')
+- Localize date formats naturally for the target language (for example, month-year ordering)
 - Keep technical terms, product names (AWS, EKS, DynamoDB, etc.) as-is
-- For company/person names in non-Latin scripts, keep original + romanization in parentheses
+- For company/person names in non-Latin scripts, transliterate into the target script; retain the original script only if explicitly requested
 - Preserve bullet points, line breaks, and formatting markers
 - If a glossary is provided, use those exact translations for matching terms
 
@@ -141,7 +147,7 @@ import sys, json
 sys.path.insert(0, 'skill/translate-pptx')
 from translate_pptx_native import review
 
-result = review("artifacts/{{output_filename}}", source_lang="{{source_lang}}")
+result = review("artifacts/{{output_filename}}", source_lang="{{source_lang}}", allow_source_script=False)
 print(json.dumps(result, indent=2))
 ```
 
@@ -150,10 +156,10 @@ If issues are found (non-intentional remaining source text):
 2. Re-extract just those slides → translate → apply again
 3. Run review again (max 2 review passes)
 
-If only intentional items remain (e.g. Korean names with romanization), report as clean.
+Treat all remaining source-script text as an issue unless the user explicitly requested that exact original-script text be preserved. If Korean remains for a non-Korean target, stop and report the issue; do not deliver the file as complete.
 
 - **Validate**: `issues` list is empty or contains only acceptable items
-- **On failure**: After 2 review passes, show remaining issues and let user decide whether to accept or fix manually.
+- **On failure**: After 2 review passes, stop and report remaining issues. Do not deliver Korean text for a non-Korean target unless the user explicitly requested that exact source text.
 
 ### Step 6: Deliver & Copy
 - **Mode**: `deterministic`
@@ -170,8 +176,8 @@ If only intentional items remain (e.g. Korean names with romanization), report a
 A translated `.pptx` file with:
 - All text translated from `{{source_lang}}` to `{{target_lang}}`
 - Original formatting preserved (paragraph-level, first-run strategy)
-- Fonts normalized: Korean → 맑은 고딕, English → Amazon Ember, Japanese → Yu Gothic UI, Chinese → Microsoft YaHei
-- XML-level font patching (NanumSquare* → 맑은 고딕)
+- Fonts normalized: Korean to Malgun Gothic, English to Amazon Ember, Japanese to Yu Gothic UI, and Chinese to Microsoft YaHei
+- XML-level font patching from NanumSquare families to Malgun Gothic
 - docProps/app.xml font list patched
 - _x000B_ artifacts cleaned
 - Saved as `{original_name}_{target_lang}.pptx`
@@ -204,4 +210,4 @@ A translated `.pptx` file with:
 - If multiple PPTX files match a filename search
 - Before starting translation (show summary, confirm)
 - If ambiguous terms appear that could be translated multiple ways
-- If review pass shows remaining issues after 2 fix passes — let user decide
+- If Korean remains for a non-Korean target after 2 fix passes, stop and report it; never deliver it as a clean result unless the user explicitly requested that exact source text

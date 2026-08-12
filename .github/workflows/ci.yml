@@ -27,6 +27,9 @@ jobs:
           pip install ruff bandit pip-audit
           pip install -r requirements.txt
 
+      - name: Test
+        run: python -m unittest discover -s scripts/tests -v
+
       - name: Lint (ruff)
         run: ruff check scripts/
 

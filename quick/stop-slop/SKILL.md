@@ -1,7 +1,7 @@
 ---
 name: stop-slop
 display_name: Stop Slop
-description: "Remove AI writing patterns from prose. Eliminate predictable AI tells — filler phrases, formulaic structures, passive voice, false agency, vague declaratives, and metronomic rhythm. Use when: 'stop slop', 'remove AI patterns', 'make this sound human', 'clean up the writing', 'edit for authenticity', 'AI 티 빼줘', '문체 다듬어줘'."
+description: "Remove AI writing patterns from prose. Eliminate predictable AI tells — filler phrases, formulaic structures, passive voice, false agency, vague declaratives, and metronomic rhythm. Use for requests such as 'stop slop', 'remove AI patterns', 'make this sound human', 'clean up the writing', or 'edit for authenticity'. Equivalent requests written in Korean are also supported."
 icon: "✂️"
 trigger: remove AI patterns from this text
 inputs:
@@ -20,6 +20,12 @@ tools: [file_read, file_read_docx, file_write, file_edit, open_in_session_tab]
 ## Overview
 
 Eliminate predictable AI writing patterns from prose.
+
+## Output Language Safety
+
+- Preserve the input document's language unless the user explicitly requests a different output language.
+- Never introduce Korean into non-Korean output, including headings, labels, annotations, scorecards, or commentary.
+- Trigger phrases and skill metadata do not determine the output language.
 
 **Author:** Hardik Pandya (https://hvpandya.com)
 **License:** MIT

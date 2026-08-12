@@ -5,8 +5,9 @@ description: |
   Removes/flags third-party unverifiable data, validates claims against AWS
   official documentation and announcements, adds proper citations, and produces
   a correction report with quality score.
-  Use when: "fact check this", "검증해줘", "verify the claims", "check sources",
-  "remove third-party data", "add citations", "출처 확인", "AWS 공식 데이터로 바꿔줘".
+  Use when: "fact check this", "verify the claims", "check sources",
+  "remove third-party data", "add citations", or equivalent requests written
+  in Korean.
 allowed-tools: [Bash, Read, Write, Edit, WebFetch, WebSearch, Agent]
 ---
 
@@ -15,6 +16,12 @@ allowed-tools: [Bash, Read, Write, Edit, WebFetch, WebSearch, Agent]
 Verify factual claims in technical documents against **authoritative sources only**. Produces a correction report with a quality score, optionally annotates the source document, or auto-fixes all issues.
 
 **Core principle:** Every factual claim must trace to an authoritative source (AWS docs, What's New, press releases) or be explicitly marked as unverifiable.
+
+## Output Language Safety
+
+- Preserve the input document's language unless the user explicitly requests a different output language.
+- Never introduce Korean into non-Korean output, including headings, labels, annotations, scorecards, or commentary.
+- Trigger phrases and skill metadata do not determine the output language.
 
 **Anti-hallucination rule:** The Common Pitfalls section contains heuristics that may become outdated. When a pitfall says "AWS does NOT publish X" — **always verify by fetching the actual service page** before flagging. If the page DOES contain the data, the claim is verified regardless of what the pitfall says.
 

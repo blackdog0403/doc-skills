@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 translate_pptx_native.py — PPTX translation helper for Amazon Quick
 
@@ -9,8 +10,12 @@ This script handles the non-LLM parts of PPTX translation:
 The agent handles the actual translation (it IS the LLM).
 """
 
-import re
+import argparse
+import json
 import os
+import re
+import sys
+
 from pptx import Presentation
 
 # ── Font Config ──
@@ -199,8 +204,8 @@ def apply_translations(pptx_path, translations, output_path, target_lang='en'):
 
 # ── Step 3: Review ──
 
-def review(pptx_path, source_lang='ko', include_notes=True):
-    """Scan for remaining source language text after translation."""
+def review(pptx_path, source_lang='ko', include_notes=True, allow_source_script=False):
+    """Scan for source text; exemptions require explicit source-script retention."""
     prs = Presentation(pptx_path)
     remaining = []
 
@@ -209,7 +214,7 @@ def review(pptx_path, source_lang='ko', include_notes=True):
             for para in frame.paragraphs:
                 if para.text.strip() and _has_lang(para.text, source_lang):
                     # Check if it's intentional (e.g. "Seoul (서울)")
-                    intentional = bool(re.search(
+                    intentional = allow_source_script and bool(re.search(
                         r'[A-Za-z].*\([^)]*[\uac00-\ud7a3\u3041-\u30f6\u4e00-\u9fff]|'
                         r'[\uac00-\ud7a3\u3041-\u30f6\u4e00-\u9fff].*\(.*[A-Za-z]',
                         para.text
@@ -224,7 +229,7 @@ def review(pptx_path, source_lang='ko', include_notes=True):
         if include_notes and slide.has_notes_slide and slide.notes_slide.notes_text_frame:
             for para in slide.notes_slide.notes_text_frame.paragraphs:
                 if para.text.strip() and _has_lang(para.text, source_lang):
-                    intentional = bool(re.search(
+                    intentional = allow_source_script and bool(re.search(
                         r'[A-Za-z].*\([^)]*[\uac00-\ud7a3\u3041-\u30f6\u4e00-\u9fff]|'
                         r'[\uac00-\ud7a3\u3041-\u30f6\u4e00-\u9fff].*\(.*[A-Za-z]',
                         para.text
@@ -298,8 +303,8 @@ def _normalize_fonts(prs, target_lang='en'):
 
 def _patch_docprops(pptx_path):
     """Patch docProps/app.xml to replace font references in the ZIP."""
-    import zipfile
     import shutil
+    import zipfile
     tmp = pptx_path + '.tmp'
     try:
         with zipfile.ZipFile(pptx_path, 'r') as zin, zipfile.ZipFile(tmp, 'w') as zout:
@@ -312,6 +317,103 @@ def _patch_docprops(pptx_path):
                     data = text.encode('utf-8')
                 zout.writestr(item, data)
         shutil.move(tmp, pptx_path)
-    except Exception:
+    except (OSError, UnicodeError, zipfile.BadZipFile):
         if os.path.exists(tmp):
             os.remove(tmp)
+
+
+# ── Command-line interface ──
+
+def _write_json(data, output_path=None):
+    """Write JSON to a file or standard output."""
+    text = json.dumps(data, ensure_ascii=False, indent=2)
+    if output_path:
+        with open(output_path, 'w', encoding='utf-8') as output_file:
+            output_file.write(text + '\n')
+    else:
+        print(text)
+
+
+def _load_translation_slides(path):
+    """Load either an extraction object or a raw slide list."""
+    with open(path, encoding='utf-8') as translation_file:
+        data = json.load(translation_file)
+    if isinstance(data, dict):
+        data = data.get('slides', data)
+    if not isinstance(data, list):
+        raise TypeError('Translation JSON must contain a slide list')
+    return data
+
+
+def build_parser():
+    """Build the native PPTX helper command-line parser."""
+    parser = argparse.ArgumentParser(
+        description='Extract, apply, and review PowerPoint translations.'
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    extract_parser = subparsers.add_parser('extract', help='Extract translatable paragraphs')
+    extract_parser.add_argument('pptx_path', help='Input PPTX file')
+    extract_parser.add_argument('--source-lang', default='ko', help='Source language code')
+    extract_parser.add_argument('--output', help='Output JSON file; defaults to stdout')
+    extract_parser.add_argument('--no-notes', action='store_true', help='Exclude speaker notes')
+
+    apply_parser = subparsers.add_parser('apply', help='Apply translated paragraph JSON')
+    apply_parser.add_argument('pptx_path', help='Input PPTX file')
+    apply_parser.add_argument('--translations', required=True, help='Translation JSON file')
+    apply_parser.add_argument('--output', required=True, help='Output PPTX file')
+    apply_parser.add_argument('--target-lang', default='en', help='Target language code')
+
+    review_parser = subparsers.add_parser('review', help='Find remaining source-language text')
+    review_parser.add_argument('pptx_path', help='Translated PPTX file')
+    review_parser.add_argument('--source-lang', default='ko', help='Source language code')
+    review_parser.add_argument('--output', help='Output JSON file; defaults to stdout')
+    review_parser.add_argument('--no-notes', action='store_true', help='Exclude speaker notes')
+    review_parser.add_argument(
+        '--allow-source-script',
+        action='store_true',
+        help='Treat mixed-script names as intentional source text',
+    )
+
+    return parser
+
+
+def main(argv=None):
+    """Run the native PPTX helper CLI."""
+    args = build_parser().parse_args(argv)
+
+    if args.command == 'extract':
+        result = extract_texts(
+            args.pptx_path,
+            source_lang=args.source_lang,
+            include_notes=not args.no_notes,
+        )
+        _write_json(result, args.output)
+        return 0
+
+    if args.command == 'apply':
+        translations = _load_translation_slides(args.translations)
+        result = apply_translations(
+            args.pptx_path,
+            translations,
+            args.output,
+            target_lang=args.target_lang,
+        )
+        _write_json(result)
+        return 0
+
+    if args.command == 'review':
+        result = review(
+            args.pptx_path,
+            source_lang=args.source_lang,
+            include_notes=not args.no_notes,
+            allow_source_script=args.allow_source_script,
+        )
+        _write_json(result, args.output)
+        return 0
+
+    raise ValueError(f'Unsupported command: {args.command}')
+
+
+if __name__ == '__main__':
+    sys.exit(main())

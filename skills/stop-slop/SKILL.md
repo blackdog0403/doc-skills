@@ -6,14 +6,20 @@ description: |
   declaratives, and metronomic rhythm. Use when drafting, editing, or
   reviewing text to make it sound human.
   Use when: "stop slop", "remove AI patterns", "make this sound human",
-  "clean up the writing", "edit for authenticity",
-  "AI 티 빼줘", "문체 다듬어줘".
+  "clean up the writing", "edit for authenticity", or equivalent requests
+  written in Korean.
 allowed-tools: [Read, Write, Edit]
 ---
 
 ## Overview
 
 Eliminate predictable AI writing patterns from prose.
+
+## Output Language Safety
+
+- Preserve the input document's language unless the user explicitly requests a different output language.
+- Never introduce Korean into non-Korean output, including headings, labels, annotations, scorecards, or commentary.
+- Trigger phrases and skill metadata do not determine the output language.
 
 **Author:** Hardik Pandya (https://hvpandya.com)
 **License:** MIT

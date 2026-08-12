@@ -1,423 +1,249 @@
 #!/usr/bin/env bash
-# ══════════════════════════════════════════════════════════════════════
-# doc-skills installer — Interactive setup for all agents
-# Usage: ./setup/install.sh
-# ══════════════════════════════════════════════════════════════════════
+# Interactive or non-interactive installer for doc-skills.
+# Examples:
+#   ./setup/install.sh
+#   ./setup/install.sh --target kiro
+#   ./setup/install.sh --target kiro --target cli
 
 set -euo pipefail
 
-# ─── Colors & Symbols ────────────────────────────────────────────────
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'  # No Color
-
-CHECK="${GREEN}✓${NC}"
-CROSS="${RED}✗${NC}"
-WARN="${YELLOW}⚠${NC}"
-ARROW="${CYAN}→${NC}"
-BULLET="${DIM}•${NC}"
-
-# ─── Paths ───────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=setup/lib.sh
+source "$SCRIPT_DIR/lib.sh"
+
 SKILLS_DIR="$REPO_ROOT/skills"
-QUICK_DIR="$REPO_ROOT/quick"
-SCRIPTS_DIR="$REPO_ROOT/scripts"
 
-KIRO_SKILLS="$HOME/.kiro/skills"
-CLAUDE_SKILLS="$HOME/.claude/skills"
-QUICK_SKILLS="$HOME/.quickwork/profiles/federate-prod/skills"
-BIN_DIR="$HOME/.local/bin"
+INSTALL_KIRO=false
+INSTALL_CLAUDE=false
+INSTALL_QUICK=false
+INSTALL_CLI=false
+SKIP_DEPENDENCIES=false
+TARGET_SUPPLIED=false
 
-# ─── Helper Functions ────────────────────────────────────────────────
-print_header() {
-    echo ""
-    echo -e "${BOLD}${BLUE}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${BLUE}║${NC}  ${BOLD}🧠 doc-skills installer${NC}                             ${BOLD}${BLUE}║${NC}"
-    echo -e "${BOLD}${BLUE}║${NC}  ${DIM}Multi-agent skill deployment tool${NC}                   ${BOLD}${BLUE}║${NC}"
-    echo -e "${BOLD}${BLUE}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
+usage() {
+    cat <<'EOF'
+Usage: ./setup/install.sh [options]
+
+Options:
+  --target kiro|claude|quick|cli|all  Install one target; may be repeated
+  --skip-dependencies                Do not create/update the CLI virtual environment
+  -h, --help                         Show this help
+
+With no --target option, an interactive menu is shown.
+EOF
 }
 
-print_section() {
-    echo ""
-    echo -e "${BOLD}─── $1 ───${NC}"
-    echo ""
-}
-
-progress_bar() {
-    local current=$1
-    local total=$2
-    local width=30
-    local percent=$((current * 100 / total))
-    local filled=$((current * width / total))
-    local empty=$((width - filled))
-    printf "\r  [${GREEN}"
-    printf "%0.s█" $(seq 1 $filled 2>/dev/null) || true
-    printf "${DIM}"
-    printf "%0.s░" $(seq 1 $empty 2>/dev/null) || true
-    printf "${NC}] %d/%d (%d%%)" "$current" "$total" "$percent"
+select_target() {
+    case "$1" in
+        kiro) INSTALL_KIRO=true ;;
+        claude) INSTALL_CLAUDE=true ;;
+        quick) INSTALL_QUICK=true ;;
+        cli) INSTALL_CLI=true ;;
+        all)
+            INSTALL_KIRO=true
+            INSTALL_CLAUDE=true
+            INSTALL_QUICK=true
+            INSTALL_CLI=true
+            ;;
+        *)
+            printf 'ERROR: Unknown target: %s\n' "$1" >&2
+            usage >&2
+            return 2
+            ;;
+    esac
 }
 
 ask_yes_no() {
     local prompt="$1"
     local default="${2:-y}"
-    local yn
+    local answer
     if [ "$default" = "y" ]; then
-        printf "  ${prompt} [${BOLD}Y${NC}/n]: "
+        printf '%s [Y/n]: ' "$prompt"
     else
-        printf "  ${prompt} [y/${BOLD}N${NC}]: "
+        printf '%s [y/N]: ' "$prompt"
     fi
-    read -r yn
-    yn="${yn:-$default}"
-    [[ "$yn" =~ ^[Yy] ]]
-}
-
-create_symlink() {
-    local src="$1"
-    local dst="$2"
-    local name="$3"
-    
-    if [ -L "$dst" ]; then
-        rm "$dst"
-    elif [ -d "$dst" ]; then
-        mv "$dst" "${dst}.bak.$(date +%s)"
-        echo -e "    ${WARN} Backed up existing: ${DIM}${name}${NC}"
-    elif [ -f "$dst" ]; then
-        mv "$dst" "${dst}.bak.$(date +%s)"
-        echo -e "    ${WARN} Backed up existing: ${DIM}${name}${NC}"
-    fi
-    ln -sf "$src" "$dst"
-}
-
-# ─── Pre-flight Check ────────────────────────────────────────────────
-preflight_check() {
-    print_section "Pre-flight Check"
-    
-    local pass=0
-    local fail=0
-    local warnings=0
-    
-    # Python
-    if command -v python3 &>/dev/null; then
-        local pyver=$(python3 --version 2>&1 | awk '{print $2}')
-        local pymajor=$(echo "$pyver" | cut -d. -f1)
-        local pyminor=$(echo "$pyver" | cut -d. -f2)
-        if [ "$pymajor" -ge 3 ] && [ "$pyminor" -ge 10 ]; then
-            echo -e "  ${CHECK} Python ${pyver} (≥3.10 required)"
-            pass=$((pass+1))
-        else
-            echo -e "  ${CROSS} Python ${pyver} — need 3.10+"
-            fail=$((fail+1))
-        fi
-    else
-        echo -e "  ${CROSS} Python not found"
-        fail=$((fail+1))
-    fi
-    
-    # Git
-    if command -v git &>/dev/null; then
-        local gitver=$(git --version | awk '{print $3}')
-        echo -e "  ${CHECK} Git ${gitver}"
-        pass=$((pass+1))
-    else
-        echo -e "  ${CROSS} Git not found"
-        fail=$((fail+1))
-    fi
-    
-    # python-docx
-    if python3 -c "import docx" 2>/dev/null; then
-        local docxver=$(python3 -c "import docx; print(docx.__version__)" 2>/dev/null || echo "?")
-        echo -e "  ${CHECK} python-docx ${docxver}"
-        pass=$((pass+1))
-    else
-        echo -e "  ${WARN} python-docx not installed ${DIM}(needed for md-to-docx CLI)${NC}"
-        warnings=$((warnings+1))
-    fi
-    
-    # python-pptx
-    if python3 -c "import pptx" 2>/dev/null; then
-        local pptxver=$(python3 -c "import pptx; print(pptx.__version__)" 2>/dev/null || echo "?")
-        echo -e "  ${CHECK} python-pptx ${pptxver}"
-        pass=$((pass+1))
-    else
-        echo -e "  ${WARN} python-pptx not installed ${DIM}(needed for translate-pptx CLI)${NC}"
-        warnings=$((warnings+1))
-    fi
-    
-    # boto3
-    if python3 -c "import boto3" 2>/dev/null; then
-        local b3ver=$(python3 -c "import boto3; print(boto3.__version__)" 2>/dev/null || echo "?")
-        echo -e "  ${CHECK} boto3 ${b3ver} ${DIM}(translate CLI)${NC}"
-        pass=$((pass+1))
-    else
-        echo -e "  ${BULLET} boto3 not installed ${DIM}(optional — only for translate CLI)${NC}"
-    fi
-    
-    # AWS credentials
-    if aws sts get-caller-identity &>/dev/null 2>&1; then
-        echo -e "  ${CHECK} AWS credentials active"
-        pass=$((pass+1))
-    else
-        echo -e "  ${BULLET} AWS credentials not configured ${DIM}(optional — only for translate CLI)${NC}"
-    fi
-    
-    # Kiro
-    if [ -d "$HOME/.kiro" ]; then
-        echo -e "  ${CHECK} Kiro detected (~/.kiro/)"
-        pass=$((pass+1))
-    else
-        echo -e "  ${BULLET} Kiro not detected ${DIM}(will create ~/.kiro/skills/)${NC}"
-    fi
-    
-    # Claude Code
-    if [ -d "$HOME/.claude" ]; then
-        echo -e "  ${CHECK} Claude Code detected (~/.claude/)"
-        pass=$((pass+1))
-    else
-        echo -e "  ${BULLET} Claude Code not detected ${DIM}(will create ~/.claude/skills/)${NC}"
-    fi
-    
-    # Amazon Quick Desktop
-    if [ -d "$HOME/.quickwork" ]; then
-        echo -e "  ${CHECK} Amazon Quick Desktop detected"
-        pass=$((pass+1))
-    else
-        echo -e "  ${BULLET} Amazon Quick Desktop not detected"
-    fi
-    
-    echo ""
-    echo -e "  ${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "  Results: ${GREEN}${pass} passed${NC}, ${YELLOW}${warnings} warnings${NC}, ${RED}${fail} failed${NC}"
-    
-    if [ "$fail" -gt 0 ]; then
-        echo ""
-        echo -e "  ${CROSS} Critical requirements missing. Fix above issues first."
-        exit 1
-    fi
-    
-    echo ""
-}
-
-# ─── Install Menu ────────────────────────────────────────────────────
-install_menu() {
-    print_section "What would you like to install?"
-    
-    echo -e "  ${BOLD}1)${NC} Everything ${DIM}(Kiro + Claude Code + Quick Desktop + CLI)${NC}"
-    echo -e "  ${BOLD}2)${NC} Slash commands only ${DIM}(Kiro + Claude Code)${NC}"
-    echo -e "  ${BOLD}3)${NC} Amazon Quick Desktop only"
-    echo -e "  ${BOLD}4)${NC} CLI scripts only ${DIM}(~/.local/bin/)${NC}"
-    echo -e "  ${BOLD}5)${NC} Custom ${DIM}(pick individually)${NC}"
-    echo ""
-    printf "  Choose [1-5]: "
-    read -r choice
-    
-    case "$choice" in
-        1) INSTALL_SLASH=true; INSTALL_QUICK=true; INSTALL_CLI=true ;;
-        2) INSTALL_SLASH=true; INSTALL_QUICK=false; INSTALL_CLI=false ;;
-        3) INSTALL_SLASH=false; INSTALL_QUICK=true; INSTALL_CLI=false ;;
-        4) INSTALL_SLASH=false; INSTALL_QUICK=false; INSTALL_CLI=true ;;
-        5)
-            INSTALL_SLASH=false; INSTALL_QUICK=false; INSTALL_CLI=false
-            ask_yes_no "Install for Kiro + Claude Code?" "y" && INSTALL_SLASH=true
-            ask_yes_no "Install for Amazon Quick Desktop?" "y" && INSTALL_QUICK=true
-            ask_yes_no "Install CLI scripts to ~/.local/bin/?" "y" && INSTALL_CLI=true
-            ;;
-        *) echo -e "  ${CROSS} Invalid choice"; exit 1 ;;
+    read -r answer
+    answer="${answer:-$default}"
+    case "$answer" in
+        y|Y|yes|YES|Yes) return 0 ;;
+        *) return 1 ;;
     esac
 }
 
-# ─── Install Slash Commands ──────────────────────────────────────────
-install_slash() {
-    print_section "Registering slash commands (Kiro + Claude Code)"
-    
-    mkdir -p "$KIRO_SKILLS" "$CLAUDE_SKILLS"
-    
-    local skills=($(ls -d "$SKILLS_DIR"/*/))
-    local total=${#skills[@]}
-    local current=0
-    
-    for skill_dir in "${skills[@]}"; do
-        current=$((current+1))
-        local name=$(basename "$skill_dir")
-        
-        # Kiro
-        create_symlink "$skill_dir" "$KIRO_SKILLS/$name" "$name"
-        # Claude Code
-        create_symlink "$skill_dir" "$CLAUDE_SKILLS/$name" "$name"
-        
-        echo -e "  ${CHECK} /${name}"
-        progress_bar $current $total
-    done
-    echo ""
-    echo ""
-    echo -e "  ${ARROW} Kiro:   ${DIM}$KIRO_SKILLS${NC}"
-    echo -e "  ${ARROW} Claude: ${DIM}$CLAUDE_SKILLS${NC}"
+interactive_menu() {
+    local choice
+    cat <<'EOF'
+
+doc-skills installer
+
+  1) Everything (Kiro + Claude Code + Quick Desktop + CLI)
+  2) Kiro only
+  3) Claude Code only
+  4) Amazon Quick Desktop only
+  5) CLI tools only
+  6) Custom
+EOF
+    printf 'Choose [1-6]: '
+    read -r choice
+    case "$choice" in
+        1) select_target all ;;
+        2) select_target kiro ;;
+        3) select_target claude ;;
+        4) select_target quick ;;
+        5) select_target cli ;;
+        6)
+            # Each answer is wrapped in `if`, not `&&`: a declined prompt makes an
+            # `&&` list return 1, and as the function's last command that aborts
+            # the installer under `set -e` before anything is installed.
+            if ask_yes_no 'Install for Kiro?' y; then INSTALL_KIRO=true; fi
+            if ask_yes_no 'Install for Claude Code?' n; then INSTALL_CLAUDE=true; fi
+            if ask_yes_no 'Install for Amazon Quick Desktop?' n; then INSTALL_QUICK=true; fi
+            if ask_yes_no 'Install standalone CLI tools?' n; then INSTALL_CLI=true; fi
+            ;;
+        *)
+            printf 'ERROR: Invalid choice: %s\n' "$choice" >&2
+            return 2
+            ;;
+    esac
 }
 
-# ─── Install Quick Desktop ───────────────────────────────────────────
-install_quick() {
-    print_section "Registering for Amazon Quick Desktop"
-    
-    mkdir -p "$QUICK_SKILLS"
-    
-    local skills=($(ls -d "$QUICK_DIR"/*/))
-    local total=${#skills[@]}
-    local current=0
-    
-    for skill_dir in "${skills[@]}"; do
-        current=$((current+1))
-        local name=$(basename "$skill_dir")
-        
-        create_symlink "$skill_dir" "$QUICK_SKILLS/$name" "$name"
-        echo -e "  ${CHECK} ${name}"
-        progress_bar $current $total
-    done
-    
-    # Script symlinks for Quick bundling
-    echo ""
-    echo ""
-    echo -e "  ${DIM}Linking scripts for bundling...${NC}"
-    
-    local tp_scripts="$QUICK_DIR/translate-pptx/scripts"
-    local md_scripts="$QUICK_DIR/md-to-docx/scripts"
-    mkdir -p "$tp_scripts" "$md_scripts"
-    
-    ln -sf "$SCRIPTS_DIR/translate_pptx_native.py" "$tp_scripts/translate_pptx_native.py" 2>/dev/null || true
-    ln -sf "$SCRIPTS_DIR/generate_styled_docx.py" "$md_scripts/generate_styled_docx.py" 2>/dev/null || true
-    
-    echo -e "  ${CHECK} Script bundles linked"
-    echo ""
-    echo -e "  ${ARROW} Quick: ${DIM}$QUICK_SKILLS${NC}"
+python_version_supported() {
+    local version major minor
+    version="$(python3 -c 'import sys; print("%s.%s" % sys.version_info[:2])')"
+    major="${version%%.*}"
+    minor="${version#*.}"
+    [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 9 ]; }
 }
 
-# ─── Install CLI ─────────────────────────────────────────────────────
-install_cli() {
-    print_section "Installing CLI scripts"
-    
-    mkdir -p "$BIN_DIR"
-    
-    # translate_pptx_cli.py → translate_pptx.py
-    create_symlink "$SCRIPTS_DIR/translate_pptx_cli.py" "$BIN_DIR/translate_pptx.py" "translate_pptx.py"
-    echo -e "  ${CHECK} translate_pptx.py"
-    
-    # generate_styled_docx.py
-    create_symlink "$SCRIPTS_DIR/generate_styled_docx.py" "$BIN_DIR/generate_styled_docx.py" "generate_styled_docx.py"
-    echo -e "  ${CHECK} generate_styled_docx.py"
-    
-    echo ""
-    echo -e "  ${ARROW} Installed to: ${DIM}$BIN_DIR${NC}"
-    
-    # Check PATH
-    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-        echo ""
-        echo -e "  ${WARN} ${BIN_DIR} is not in your PATH!"
-        echo -e "  ${DIM}  Add to ~/.zshrc:${NC}"
-        echo -e "  ${DIM}  export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-    fi
-}
-
-# ─── Post-install Verification ───────────────────────────────────────
-verify_install() {
-    print_section "Verification"
-    
-    local pass=0
-    local fail=0
-    
-    if [ "$INSTALL_SLASH" = true ]; then
-        for skill in doc-fact-check md-to-docx translate-pptx stop-slop; do
-            if [ -L "$KIRO_SKILLS/$skill" ] && [ -e "$KIRO_SKILLS/$skill/SKILL.md" ]; then
-                pass=$((pass+1))
-            else
-                echo -e "  ${CROSS} Kiro: /$skill missing"; fail=$((fail+1))
-            fi
-            if [ -L "$CLAUDE_SKILLS/$skill" ] && [ -e "$CLAUDE_SKILLS/$skill/SKILL.md" ]; then
-                pass=$((pass+1))
-            else
-                echo -e "  ${CROSS} Claude: /$skill missing"; fail=$((fail+1))
-            fi
-        done
-    fi
-    
-    if [ "$INSTALL_QUICK" = true ]; then
-        for skill in doc-fact-check md-to-docx translate-pptx stop-slop; do
-            if [ -L "$QUICK_SKILLS/$skill" ] && [ -e "$QUICK_SKILLS/$skill/SKILL.md" ]; then
-                pass=$((pass+1))
-            else
-                echo -e "  ${CROSS} Quick: $skill missing"; fail=$((fail+1))
-            fi
-        done
-    fi
-    
-    if [ "$INSTALL_CLI" = true ]; then
-        for script in translate_pptx.py generate_styled_docx.py; do
-            if [ -L "$BIN_DIR/$script" ] && [ -e "$BIN_DIR/$script" ]; then
-                pass=$((pass+1))
-            else
-                echo -e "  ${CROSS} CLI: $script missing"; fail=$((fail+1))
-            fi
-        done
-    fi
-    
-    if [ "$fail" -eq 0 ]; then
-        echo -e "  ${CHECK} All ${pass} checks passed!"
+check_module() {
+    local module="$1"
+    local purpose="$2"
+    if python3 -c "import $module" >/dev/null 2>&1; then
+        printf 'PASS: Python module %s is available\n' "$module"
     else
-        echo -e "  ${pass} passed, ${fail} failed"
+        printf 'WARNING: Python module %s is missing (%s)\n' "$module" "$purpose"
     fi
 }
 
-# ─── Summary ─────────────────────────────────────────────────────────
-print_summary() {
-    echo ""
-    echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${GREEN}║${NC}  ${BOLD}🎉 Installation complete!${NC}                            ${BOLD}${GREEN}║${NC}"
-    echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    
-    if [ "$INSTALL_SLASH" = true ]; then
-        echo -e "  ${BOLD}Kiro / Claude Code:${NC}"
-        echo -e "    ${DIM}> /doc-fact-check report.md${NC}"
-        echo -e "    ${DIM}> /md-to-docx notes.md${NC}"
-        echo -e "    ${DIM}> /translate-pptx deck.pptx source:ko target:en${NC}"
-        echo ""
+preflight_check() {
+    local needs_runtime=false
+    if [ "$INSTALL_KIRO" = true ] || [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CLI" = true ]; then
+        needs_runtime=true
     fi
-    
+
+    printf '\nPreflight checks\n'
+    if [ "$needs_runtime" = true ]; then
+        if ! command -v python3 >/dev/null 2>&1; then
+            if [ "$INSTALL_CLI" = true ]; then
+                printf 'ERROR: Python 3 is required for CLI installation.\n' >&2
+                return 1
+            fi
+            printf 'WARNING: Python 3 is missing; document conversion helpers will be unavailable.\n'
+        elif ! python_version_supported; then
+            if [ "$INSTALL_CLI" = true ]; then
+                printf 'ERROR: Python 3.9 or newer is required for CLI installation.\n' >&2
+                return 1
+            fi
+            printf 'WARNING: Python 3.9 or newer is recommended for runtime helpers.\n'
+        else
+            printf 'PASS: %s\n' "$(python3 --version 2>&1)"
+            if [ "$INSTALL_KIRO" = true ] || [ "$INSTALL_CLAUDE" = true ]; then
+                check_module docx 'required by md-to-docx'
+                check_module pptx 'required by translate-pptx'
+            fi
+        fi
+    else
+        printf 'PASS: Selected target does not require local Python.\n'
+    fi
+
+    if command -v git >/dev/null 2>&1; then
+        printf 'INFO: %s\n' "$(git --version)"
+    else
+        printf 'INFO: Git is not required when installing from this local checkout.\n'
+    fi
+}
+
+install_selected_targets() {
+    if [ "$INSTALL_KIRO" = true ] || [ "$INSTALL_CLAUDE" = true ]; then
+        printf '\nPreparing agent runtime helpers\n'
+        prepare_agent_runtime_links "$REPO_ROOT"
+    fi
+    if [ "$INSTALL_KIRO" = true ]; then
+        printf '\nInstalling Kiro skills\n'
+        link_skill_tree "$SKILLS_DIR" "$HOME/.kiro/skills" "Kiro"
+    fi
+    if [ "$INSTALL_CLAUDE" = true ]; then
+        printf '\nInstalling Claude Code skills\n'
+        link_skill_tree "$SKILLS_DIR" "$HOME/.claude/skills" "Claude Code"
+    fi
     if [ "$INSTALL_QUICK" = true ]; then
-        echo -e "  ${BOLD}Amazon Quick Desktop:${NC}"
-        echo -e "    ${DIM}> fact check this document${NC}"
-        echo -e "    ${DIM}> md를 docx로 변환해줘${NC}"
-        echo -e "    ${DIM}> pptx 번역해줘${NC}"
-        echo ""
+        printf '\nInstalling Amazon Quick Desktop skills\n'
+        "$SCRIPT_DIR/link-quick.sh"
     fi
-    
     if [ "$INSTALL_CLI" = true ]; then
-        echo -e "  ${BOLD}CLI:${NC}"
-        echo -e "    ${DIM}\$ generate_styled_docx.py report.md${NC}"
-        echo -e "    ${DIM}\$ translate_pptx.py deck.pptx --source ko --target en${NC}"
-        echo ""
+        printf '\nInstalling CLI tools\n'
+        if [ "$SKIP_DEPENDENCIES" = true ]; then
+            "$SCRIPT_DIR/install-cli.sh" --skip-dependencies
+        else
+            "$SCRIPT_DIR/install-cli.sh"
+        fi
     fi
-    
-    echo -e "  ${DIM}To update later: git pull && ./setup/install.sh${NC}"
-    echo ""
 }
 
-# ─── Main ────────────────────────────────────────────────────────────
-main() {
-    print_header
-    preflight_check
-    install_menu
-    
-    [ "$INSTALL_SLASH" = true ] && install_slash
-    [ "$INSTALL_QUICK" = true ] && install_quick
-    [ "$INSTALL_CLI" = true ] && install_cli
-    
-    verify_install
-    print_summary
+verify_selected_targets() {
+    local args=()
+    [ "$INSTALL_KIRO" = true ] && args+=(--target kiro)
+    [ "$INSTALL_CLAUDE" = true ] && args+=(--target claude)
+    [ "$INSTALL_QUICK" = true ] && args+=(--target quick)
+    [ "$INSTALL_CLI" = true ] && args+=(--target cli)
+    "$SCRIPT_DIR/test-setup.sh" "${args[@]}"
 }
 
-main "$@"
+print_summary() {
+    printf '\nInstallation complete.\n'
+    [ "$INSTALL_KIRO" = true ] && printf '  Kiro: %s\n' "$HOME/.kiro/skills"
+    [ "$INSTALL_CLAUDE" = true ] && printf '  Claude Code: %s\n' "$HOME/.claude/skills"
+    [ "$INSTALL_QUICK" = true ] && printf '  Quick Desktop: %s\n' "$HOME/.quickwork/profiles/federate-prod/skills"
+    [ "$INSTALL_CLI" = true ] && printf '  CLI tools: %s\n' "$HOME/.local/bin"
+    printf 'Example requests: fact check this document; convert markdown to DOCX; translate this presentation.\n'
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --target)
+            [ "$#" -ge 2 ] || { printf 'ERROR: --target requires a value.\n' >&2; exit 2; }
+            TARGET_SUPPLIED=true
+            select_target "$2"
+            shift 2
+            ;;
+        --skip-dependencies)
+            SKIP_DEPENDENCIES=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'ERROR: Unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [ "$TARGET_SUPPLIED" = false ]; then
+    interactive_menu
+fi
+
+if [ "$INSTALL_KIRO" = false ] && [ "$INSTALL_CLAUDE" = false ] \
+    && [ "$INSTALL_QUICK" = false ] && [ "$INSTALL_CLI" = false ]; then
+    printf 'ERROR: No installation target selected.\n' >&2
+    exit 2
+fi
+
+preflight_check
+install_selected_targets
+verify_selected_targets
+print_summary

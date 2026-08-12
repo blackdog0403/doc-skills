@@ -1,4 +1,4 @@
-#!/Users/kwangyou/.local/share/translate-pptx-venv/bin/python
+#!/usr/bin/env python3
 """
 PPTX Translator using AWS Bedrock (Claude Opus)
 
@@ -11,13 +11,15 @@ Key design decisions:
 - Retry logic for API failures
 """
 
+import argparse
 import json
 import re
 import sys
 import time
-import argparse
-from pptx import Presentation
+
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+from pptx import Presentation
 
 # ── Config ──
 MODEL_ID = "us.anthropic.claude-opus-4-6-v1"
@@ -60,6 +62,7 @@ LANG_NAMES = {
 SOURCE_LANG = 'ko'
 TARGET_LANG = 'en'
 GLOSSARY = {}  # term → translation mapping, loaded from --glossary file
+PRESERVE_SOURCE_SCRIPT = False  # opt-in only; prevents Korean retention in non-Korean output
 TOTAL_INPUT_TOKENS = 0
 TOTAL_OUTPUT_TOKENS = 0
 
@@ -168,13 +171,6 @@ def normalize_fonts(prs):
                 elem.set('typeface', FONT_REPLACE[typeface])
                 xml_count += 1
 
-    # 3) Patch docProps/app.xml (font list in package)
-    try:
-        from pptx.opc.constants import RELATIONSHIP_TYPE as RT
-        _app_part = prs.part.package.part_related_by(RT.CORE_PROPERTIES)
-    except Exception:
-        pass  # not critical
-
     return count, xml_count
 
 
@@ -193,9 +189,12 @@ def translate_batch(texts, model_id):
         f"- Produce natural {tgt_name} sentence structure (do NOT translate word-by-word)\n"
         "- Localize date formats naturally (e.g. '2024년 10월' → 'October 2024', or 'Oct 2024' → '2024년 10월')\n"
         "- Keep technical terms, product names (Kiro, AWS, DynamoDB, SQS, etc.) as-is\n"
-        "- For company names in non-Latin scripts, keep original + add romanization in parentheses\n"
         "- Preserve any markdown, bullet points, or line breaks in the original\n"
     )
+    if PRESERVE_SOURCE_SCRIPT:
+        prompt += "- For company names in non-Latin scripts, keep the original and add romanization in parentheses\n"
+    else:
+        prompt += "- Transliterate non-Latin names into the target script; do not retain source-script characters\n"
     if GLOSSARY:
         prompt += "\n- MANDATORY glossary (use these exact translations):\n"
         for src, tgt in GLOSSARY.items():
@@ -221,14 +220,20 @@ def translate_batch(texts, model_id):
             result = resp_body['content'][0]['text']
             parsed = _parse_json_array(result)
             if parsed and len(parsed) == len(texts):
+                if (
+                    TARGET_LANG != 'ko'
+                    and not PRESERVE_SOURCE_SCRIPT
+                    and any(has_korean(str(item)) for item in parsed)
+                ):
+                    raise ValueError("Model returned Korean for a non-Korean target")
                 return parsed
-        except Exception as e:
+        except (BotoCoreError, ClientError, KeyError, OSError, TypeError, ValueError) as e:
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
             print(f"\n  ⚠ API error after {MAX_RETRIES} retries: {e}", file=sys.stderr)
 
-    return texts  # fallback: return originals
+    raise RuntimeError("Translation failed; refusing to reuse source text in target output")
 
 
 def _parse_json_array(text):
@@ -300,8 +305,8 @@ def progress(label, current, total, detail=""):
 
 def translate_pass(prs, model_id, label="Translating", slide_indices=None, include_notes=True):
     """Single translation pass over all (or selected) slides with parallel API calls."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     total_slides = len(prs.slides)
     total_translated = 0
@@ -340,7 +345,7 @@ def translate_pass(prs, model_id, label="Translating", slide_indices=None, inclu
         futures = {executor.submit(process_slide, si): si for si in indices}
         for future in as_completed(futures):
             si = futures[future]
-            si_result, translations = future.result()
+            _si_result, translations = future.result()
             results[si] = translations
             with progress_lock:
                 completed[0] += 1
@@ -356,6 +361,16 @@ def translate_pass(prs, model_id, label="Translating", slide_indices=None, inclu
 
     print()
     return total_translated
+
+
+def is_intentional_source_text(text):
+    """Return true only for explicitly requested mixed-script name retention."""
+    if not PRESERVE_SOURCE_SCRIPT:
+        return False
+    return bool(re.search(
+        r'[A-Za-z].*\([^)]*[가-힣ぁ-ヶ一-鿿]|[가-힣ぁ-ヶ一-鿿].*\(.*[A-Za-z]',
+        text,
+    ))
 
 
 def review_pass(prs, slide_indices=None, include_notes=True):
@@ -377,6 +392,21 @@ def review_pass(prs, slide_indices=None, include_notes=True):
     print()
     return remaining
 
+
+
+def find_korean_text(prs, include_notes=True):
+    """Return Korean text that would violate a non-Korean output contract."""
+    remaining = []
+    for slide_num, slide in enumerate(prs.slides, start=1):
+        for frame in _iter_all_frames(slide):
+            for paragraph in frame.paragraphs:
+                if has_korean(paragraph.text):
+                    remaining.append((slide_num, 'text', paragraph.text[:120]))
+        if include_notes and slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+            for paragraph in slide.notes_slide.notes_text_frame.paragraphs:
+                if has_korean(paragraph.text):
+                    remaining.append((slide_num, 'note', paragraph.text[:120]))
+    return remaining
 
 
 def summarize_presentation(prs, model_id, slide_indices=None):
@@ -411,8 +441,10 @@ def summarize_presentation(prs, model_id, slide_indices=None):
     if len(all_text) > 80000:
         all_text = all_text[:80000] + "\n...(truncated)"
 
+    tgt_name = LANG_NAMES.get(TARGET_LANG, TARGET_LANG)
     prompt = (
-        "Analyze this presentation and provide a structured summary:\n\n"
+        f"Analyze this presentation and provide a structured summary entirely in {tgt_name}. "
+        f"Do not introduce Korean unless {tgt_name} is Korean.\n\n"
         "1. **Title & Speaker** — presentation title and presenter\n"
         "2. **Executive Summary** — 3-5 sentence overview\n"
         "3. **Key Topics** — bullet list of main topics covered\n"
@@ -530,14 +562,17 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Preview translation scope without API calls')
     parser.add_argument('--no-notes', action='store_true', help='Skip slide notes translation')
     parser.add_argument('--glossary', help='JSON glossary file for fixed term translations')
+    parser.add_argument('--preserve-source-script', action='store_true',
+                        help='Retain original-script names with romanization (off by default)')
     parser.add_argument('--resume', action='store_true', help='Skip already-translated slides (no source language text)')
     parser.add_argument('--report', help='Output markdown review report path (used with --mode review)')
     parser.add_argument('--original', help='Original PPTX for comparison report (used with --report)')
     args = parser.parse_args()
 
-    global SOURCE_LANG, TARGET_LANG, GLOSSARY
+    global SOURCE_LANG, TARGET_LANG, GLOSSARY, PRESERVE_SOURCE_SCRIPT
     SOURCE_LANG = args.source
     TARGET_LANG = args.target
+    PRESERVE_SOURCE_SCRIPT = args.preserve_source_script
 
     # Load glossary
     if args.glossary:
@@ -607,6 +642,8 @@ def main():
     if args.mode == 'summary':
         print("📝 Generating presentation summary...")
         summary = summarize_presentation(prs, args.model, slide_indices)
+        if TARGET_LANG != 'ko' and not PRESERVE_SOURCE_SCRIPT and has_korean(summary):
+            raise RuntimeError("Summary contained Korean for a non-Korean target; no output emitted")
         print(summary)
         print("\n✅ Summary complete")
         return
@@ -626,13 +663,13 @@ def main():
                 print("   ✅ No remaining source language text found!")
                 break
 
-            real_issues = [r for r in remaining if not re.search(r'[A-Za-z].*\([^)]*[가-힣ぁ-ヶ一-鿿]|[가-힣ぁ-ヶ一-鿿].*\(.*[A-Za-z]', r[2])]
+            real_issues = [r for r in remaining if not is_intentional_source_text(r[2])]
 
             if not real_issues:
                 print(f"   ✅ {len(remaining)} item(s) with intentional {src_name} (names with romanization) — OK")
                 break
 
-            slides_affected = sorted(set(r[0] for r in real_issues))
+            slides_affected = sorted({r[0] for r in real_issues})
             print(f"   ⚠ {len(real_issues)} untranslated paragraph(s) in slides: {slides_affected}")
 
             print(f"\n🔄 Fix pass {pass_num}...")
@@ -646,7 +683,7 @@ def main():
         if not remaining:
             print("   ✅ No source language text found!")
         else:
-            real_issues = [r for r in remaining if not re.search(r'[A-Za-z].*\([^)]*[가-힣ぁ-ヶ一-鿿]|[가-힣ぁ-ヶ一-鿿].*\(.*[A-Za-z]', r[2])]
+            real_issues = [r for r in remaining if not is_intentional_source_text(r[2])]
             intentional = len(remaining) - len(real_issues)
             if intentional:
                 print(f"   ✅ {intentional} intentional (names with romanization)")
@@ -691,7 +728,7 @@ def main():
             print(f"   🔢 Tokens: {TOTAL_INPUT_TOKENS:,} input + {TOTAL_OUTPUT_TOKENS:,} output")
             print(f"   💰 Est. cost: ${cost:.3f} (Opus pricing)")
         if remaining:
-            intentional = [r for r in remaining if re.search(r'[A-Za-z].*\([^)]*[가-힣ぁ-ヶ一-鿿]|[가-힣ぁ-ヶ一-鿿].*\(.*[A-Za-z]', r[2])]
+            intentional = [r for r in remaining if is_intentional_source_text(r[2])]
             issues = [r for r in remaining if r not in intentional]
             if intentional:
                 print(f"   ✅ {len(intentional)} intentional {src_name} (names with romanization)")
@@ -702,21 +739,33 @@ def main():
         else:
             print("   ✅ All source language text successfully translated!")
 
+    # ── Non-Korean output gate ──
+    if args.mode in ('translate', 'all') and TARGET_LANG != 'ko' and not PRESERVE_SOURCE_SCRIPT:
+        korean_remaining = find_korean_text(prs, include_notes)
+        if korean_remaining:
+            locations = ", ".join(
+                f"slide {slide_num} [{location}]" for slide_num, location, _ in korean_remaining[:5]
+            )
+            raise RuntimeError(
+                f"Refusing to save non-Korean output with {len(korean_remaining)} Korean text item(s): "
+                f"{locations}"
+            )
+
     # ── Save ──
     if args.mode != 'review':
         print(f"\n💾 Saving to {output}...")
         prs.save(output)
 
-        import zipfile
         import shutil
+        import zipfile
         tmp_path = output + '.tmp'
         with zipfile.ZipFile(output, 'r') as zin, zipfile.ZipFile(tmp_path, 'w') as zout:
             for item in zin.infolist():
                 data = zin.read(item.filename)
                 if item.filename == 'docProps/app.xml':
                     text = data.decode('utf-8')
-                    for old_font in FONT_REPLACE:
-                        text = text.replace(old_font, FONT_REPLACE[old_font])
+                    for old_font, new_font in FONT_REPLACE.items():
+                        text = text.replace(old_font, new_font)
                     data = text.encode('utf-8')
                 zout.writestr(item, data)
         shutil.move(tmp_path, output)
