@@ -109,11 +109,12 @@ check_agent() {
     local skill expected
 
     printf '\nChecking %s\n' "$platform"
-    for skill in doc-fact-check md-to-docx stop-slop translate-pptx; do
+    while IFS= read -r skill; do
+        [ -n "$skill" ] || continue
         expected="$REPO_ROOT/skills/$skill"
         check_link "$platform $skill" "$destination_root/$skill" "$expected"
         check_file "$platform $skill SKILL.md" "$destination_root/$skill/SKILL.md"
-    done
+    done < <(list_skill_names "$REPO_ROOT/skills")
     check_executable "$platform md-to-docx bundled helper" \
         "$destination_root/md-to-docx/scripts/generate_styled_docx.py"
     check_executable "$platform translate-pptx bundled helper" \
@@ -125,11 +126,12 @@ check_quick() {
     local skill expected
 
     printf '\nChecking Amazon Quick Desktop\n'
-    for skill in doc-fact-check md-to-docx stop-slop translate-pptx; do
+    while IFS= read -r skill; do
+        [ -n "$skill" ] || continue
         expected="$REPO_ROOT/quick/$skill"
         check_link "Quick Desktop $skill" "$root/$skill" "$expected"
         check_file "Quick Desktop $skill SKILL.md" "$root/$skill/SKILL.md"
-    done
+    done < <(list_skill_names "$REPO_ROOT/quick")
     check_executable 'Quick md-to-docx bundled helper' \
         "$root/md-to-docx/scripts/generate_styled_docx.py"
     check_executable 'Quick translate-pptx bundled helper' \

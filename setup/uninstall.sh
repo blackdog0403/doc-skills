@@ -172,20 +172,22 @@ remove_agent() {
     local platform="$1"
     local destination_root="$2"
     local skill
-    for skill in doc-fact-check md-to-docx stop-slop translate-pptx; do
+    while IFS= read -r skill; do
+        [ -n "$skill" ] || continue
         remove_managed_link "$platform $skill" \
             "$destination_root/$skill" "$REPO_ROOT/skills/$skill"
-    done
+    done < <(list_skill_names "$REPO_ROOT/skills")
     rmdir "$destination_root" 2>/dev/null || true
 }
 
 remove_quick() {
     local destination_root="$HOME/.quickwork/profiles/federate-prod/skills"
     local skill
-    for skill in doc-fact-check md-to-docx stop-slop translate-pptx; do
+    while IFS= read -r skill; do
+        [ -n "$skill" ] || continue
         remove_managed_link "Quick Desktop $skill" \
             "$destination_root/$skill" "$REPO_ROOT/quick/$skill"
-    done
+    done < <(list_skill_names "$REPO_ROOT/quick")
     rmdir "$destination_root" 2>/dev/null || true
 }
 

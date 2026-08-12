@@ -112,6 +112,21 @@ prepare_agent_runtime_links() {
         'translate-pptx bundled helper'
 }
 
+list_skill_names() {
+    local source_root="$1"
+    local skill_dir
+
+    if [ ! -d "$source_root" ]; then
+        printf 'ERROR: Skill source directory does not exist: %s\n' "$source_root" >&2
+        return 1
+    fi
+
+    for skill_dir in "$source_root"/*/; do
+        [ -f "$skill_dir/SKILL.md" ] || continue
+        basename "$skill_dir"
+    done
+}
+
 link_skill_tree() {
     local source_root="$1"
     local destination_root="$2"
