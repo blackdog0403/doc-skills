@@ -11,13 +11,14 @@ Key design decisions:
 - Retry logic for API failures
 """
 
+import argparse
 import json
 import re
 import sys
 import time
-import argparse
-from pptx import Presentation
+
 import boto3
+from pptx import Presentation
 
 # ── Config ──
 MODEL_ID = "us.anthropic.claude-opus-4-6-v1"
@@ -172,7 +173,7 @@ def normalize_fonts(prs):
     try:
         from pptx.opc.constants import RELATIONSHIP_TYPE as RT
         _app_part = prs.part.package.part_related_by(RT.CORE_PROPERTIES)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 - app.xml font list is cosmetic; skip on any failure
         pass  # not critical
 
     return count, xml_count
@@ -222,7 +223,7 @@ def translate_batch(texts, model_id):
             parsed = _parse_json_array(result)
             if parsed and len(parsed) == len(texts):
                 return parsed
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - any API/parse failure is retried, then reported
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
@@ -300,8 +301,8 @@ def progress(label, current, total, detail=""):
 
 def translate_pass(prs, model_id, label="Translating", slide_indices=None, include_notes=True):
     """Single translation pass over all (or selected) slides with parallel API calls."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     total_slides = len(prs.slides)
     total_translated = 0
@@ -340,7 +341,7 @@ def translate_pass(prs, model_id, label="Translating", slide_indices=None, inclu
         futures = {executor.submit(process_slide, si): si for si in indices}
         for future in as_completed(futures):
             si = futures[future]
-            si_result, translations = future.result()
+            _, translations = future.result()
             results[si] = translations
             with progress_lock:
                 completed[0] += 1
@@ -632,7 +633,7 @@ def main():
                 print(f"   ✅ {len(remaining)} item(s) with intentional {src_name} (names with romanization) — OK")
                 break
 
-            slides_affected = sorted(set(r[0] for r in real_issues))
+            slides_affected = sorted({r[0] for r in real_issues})
             print(f"   ⚠ {len(real_issues)} untranslated paragraph(s) in slides: {slides_affected}")
 
             print(f"\n🔄 Fix pass {pass_num}...")
@@ -707,16 +708,16 @@ def main():
         print(f"\n💾 Saving to {output}...")
         prs.save(output)
 
-        import zipfile
         import shutil
+        import zipfile
         tmp_path = output + '.tmp'
         with zipfile.ZipFile(output, 'r') as zin, zipfile.ZipFile(tmp_path, 'w') as zout:
             for item in zin.infolist():
                 data = zin.read(item.filename)
                 if item.filename == 'docProps/app.xml':
                     text = data.decode('utf-8')
-                    for old_font in FONT_REPLACE:
-                        text = text.replace(old_font, FONT_REPLACE[old_font])
+                    for old_font, new_font in FONT_REPLACE.items():
+                        text = text.replace(old_font, new_font)
                     data = text.encode('utf-8')
                 zout.writestr(item, data)
         shutil.move(tmp_path, output)
