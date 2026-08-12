@@ -67,9 +67,10 @@ jobs:
           | File | Skill | Description |
           |------|-------|-------------|
           | `doc-fact-check-quick-*.zip` | 🔍 Document Fact Checker | Verify claims against AWS official sources |
-          | `md-to-docx-quick-*.zip` | 📄 Markdown to DOCX | Convert MD → styled Word with AWS branding |
+          | `md-to-docx-quick-*.zip` | 📄 Markdown to DOCX | Convert MD → styled Word (AWS or Amazon narrative style) |
           | `translate-pptx-quick-*.zip` | 🌐 Translate PPTX | Translate presentations between languages |
           | `stop-slop-quick-*.zip` | ✂️ Stop Slop | Remove AI writing patterns from prose |
+          | `verity-quick-*.zip` | ✅ Verity | Verify an AI answer's factual grounding, with a trust score |
           | `doc-skills-all-quick-*.zip` | 📦 All Skills | Everything in one package |
           EOF
 
