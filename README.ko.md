@@ -78,7 +78,6 @@ git, 터미널, Python 설치 다 필요 없습니다. 앱 UI에서 ZIP을 임�
 > AI 티 빼줘               → stop-slop 동작
 > md를 docx로 변환해줘      → md-to-docx 동작
 > pptx 번역해줘            → translate-pptx 동작
-> 이 답변 검증해줘          → verity 동작
 ```
 
 > 💡 파일을 다루는 스킬은 대화에 파일을 **첨부**하거나, Quick이 접근 가능한 폴더에 파일을 넣어두면 됩니다.
@@ -142,11 +141,9 @@ chmod +x setup/*.sh
 | 스킬 | 하는 일 | 에이전트 | 사내 전용 여부 |
 |-------|-------------|:------:|:---:|
 | 🔍 **[doc-fact-check](skills/doc-fact-check/)** | 기술 문서의 사실 주장을 AWS 공식 출처에 대조해 검증 — 품질 점수와 함께 교정 보고서 생성. | Kiro · CC · Quick | 🌐 Public |
-| 📄 **[md-to-docx](skills/md-to-docx/)** | Markdown을 Word(.docx)로 변환 — AWS Orange 브랜드 스타일 또는 Amazon 내러티브(Meridian) 스타일, 배지·표·Mermaid 다이어그램 지원. | Kiro · CC · Quick | 🌐 Public |
+| 📄 **[md-to-docx](skills/md-to-docx/)** | Markdown을 AWS Orange 브랜드 컬러, 배지, 표가 적용된 Word(.docx)로 변환. | Kiro · CC · Quick | 🌐 Public |
 | 🌐 **[translate-pptx](skills/translate-pptx/)** | LLM 기반으로 PowerPoint 번역 — 외부 API 호출 없음. | Kiro · CC · Quick | 🌐 Public |
 | ✂️ **[stop-slop](skills/stop-slop/)** | 산문에서 AI 작문 패턴 제거 — 군더더기 표현, 형식적 구조, 수동태, 가짜 주어, 단조로운 리듬. [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop) 기반. | Kiro · CC · Quick | 🌐 Public |
-| ✅ **[verity](skills/verity/)** | AI 답변의 사실 근거 검증 — 답변을 원자 단위 주장으로 분해하고 각 주장을 출처에 대조해 신뢰도(FARM) 점수 산출. | Kiro · CC · Quick | 🌐 Public |
-| 💰 **[aws-price-check](skills/aws-price-check/)** | 문서의 모든 가격 주장을 지정 리전의 AWS 공식 가격과 대조 — 리전 불일치 탐지, 합계 재계산. | Kiro · CC | 🌐 Public |
 
 ### 왜 doc-skills인가?
 
@@ -206,10 +203,6 @@ doc-skills/
 │   │   └── SKILL.md                 #   /md-to-docx
 │   ├── translate-pptx/
 │   │   └── SKILL.md                 #   /translate-pptx
-│   ├── verity/
-│   │   └── SKILL.md                 #   /verity
-│   ├── aws-price-check/
-│   │   └── SKILL.md                 #   /aws-price-check
 │   └── stop-slop/
 │       ├── SKILL.md                 #   /stop-slop
 │       └── references/
@@ -226,8 +219,6 @@ doc-skills/
 │   ├── translate-pptx/
 │   │   ├── SKILL.md
 │   │   └── scripts/                 #   → scripts/ 로 symlink
-│   ├── verity/
-│   │   └── SKILL.md
 │   └── stop-slop/
 │       ├── SKILL.md
 │       └── references/              #   → skills/stop-slop/references/ 로 symlink
@@ -265,10 +256,7 @@ doc-skills/
 # Slash command로 직접 호출
 > /translate-pptx deck.pptx source:ko target:en
 > /md-to-docx report.md
-> /md-to-docx one-pager.md, style:meridian
 > /doc-fact-check whitepaper.md
-> /verity last response
-> /aws-price-check proposal.md region:ap-northeast-2
 
 # 의도를 자연어로 표현하면 Kiro가 description으로 매칭
 > 이 발표자료 영어로 번역해줘

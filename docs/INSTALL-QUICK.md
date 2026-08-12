@@ -40,9 +40,8 @@
 |----------|-------|--------------|
 | `stop-slop-quick-*.zip` | ✂️ Stop Slop | Remove AI writing patterns from prose |
 | `doc-fact-check-quick-*.zip` | 🔍 Document Fact Checker | Verify claims against AWS official sources |
-| `md-to-docx-quick-*.zip` | 📄 Markdown to DOCX | Convert MD → styled Word document (AWS or Amazon narrative style) |
+| `md-to-docx-quick-*.zip` | 📄 Markdown to DOCX | Convert MD → styled Word document |
 | `translate-pptx-quick-*.zip` | 🌐 Translate PPTX | Translate presentations between languages |
-| `verity-quick-*.zip` | ✅ Verity | Verify an AI answer's factual grounding, with a trust score |
 | `doc-skills-all-quick-*.zip` | 📦 All Skills | Everything in one package |
 
 ### Updating a Skill
@@ -118,9 +117,8 @@ If you prefer manual installation or the UI import isn't available:
 |----------|------|------|
 | `stop-slop-quick-*.zip` | ✂️ Stop Slop | AI가 쓴 티가 나는 문체 패턴 제거 |
 | `doc-fact-check-quick-*.zip` | 🔍 문서 팩트체커 | AWS 공식 소스 기반 팩트 검증 |
-| `md-to-docx-quick-*.zip` | 📄 MD → DOCX | 마크다운을 스타일링된 Word로 변환 (AWS 스타일 / Amazon 내러티브 스타일) |
+| `md-to-docx-quick-*.zip` | 📄 MD → DOCX | 마크다운을 스타일링된 Word로 변환 |
 | `translate-pptx-quick-*.zip` | 🌐 PPTX 번역 | 프레젠테이션 다국어 번역 |
-| `verity-quick-*.zip` | ✅ Verity | AI 답변의 사실 근거 검증 + 신뢰도 점수 |
 | `doc-skills-all-quick-*.zip` | 📦 전체 | 모든 스킬 한 번에 |
 
 ### 업데이트

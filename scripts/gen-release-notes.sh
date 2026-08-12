@@ -16,7 +16,7 @@ RANGE="HEAD"; [ -n "$PREV" ] && RANGE="${PREV}..HEAD"
 SUBJECTS="$(git log --no-merges --pretty='%s' "$RANGE")"
 [ -z "$SUBJECTS" ] && { echo "_No changes._"; exit 0; }
 
-KNOWN='^(feat|fix|docs|ci|build|chore|doc-fact-check|md-to-docx|translate-pptx|stop-slop|verity|aws-price-check)[(:]'
+KNOWN='^(feat|docs|ci|build|chore|doc-fact-check|md-to-docx|translate-pptx|stop-slop)[(:]'
 
 section() { # $1=title  $2=ERE prefix match
   local m; m="$(printf '%s\n' "$SUBJECTS" | grep -iE "$2" || true)"
@@ -30,8 +30,7 @@ printf "## What's Changed\n"
 [ -n "$PREV" ] && printf '_Changes since %s_\n' "$PREV"
 printf '\n'
 
-section '✨ Skills & Features' '^(feat|doc-fact-check|md-to-docx|translate-pptx|stop-slop|verity|aws-price-check)[(:]'
-section '🐛 Fixes'             '^fix[(:]'
+section '✨ Skills & Features' '^(feat|doc-fact-check|md-to-docx|translate-pptx|stop-slop)[(:]'
 section '📖 Documentation'     '^docs[(:]'
 section '🔧 CI & Tooling'      '^(ci|build|chore)[(:]'
 
