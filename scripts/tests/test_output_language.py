@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import translate_pptx_native  # noqa: E402
+import translate_pptx_native
 
 HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
 
