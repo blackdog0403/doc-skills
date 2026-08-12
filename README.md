@@ -78,6 +78,7 @@ Open a new conversation and type:
 > stop slop this draft          → runs stop-slop
 > convert this markdown to docx  → runs md-to-docx
 > translate this pptx           → runs translate-pptx
+> verify this answer            → runs verity
 ```
 
 > 💡 For skills that work on files, **attach the file** to the conversation or drop it in a folder Quick can access.
@@ -170,9 +171,11 @@ Use `--yes` for non-interactive automation.
 | Skill | What it does | Agents | Internal Access |
 |-------|-------------|:------:|:---:|
 | 🔍 **[doc-fact-check](skills/doc-fact-check/)** | Verify factual claims in technical documents against AWS official sources — produces a correction report with quality score. | Kiro · CC · Quick | 🌐 Public |
-| 📄 **[md-to-docx](skills/md-to-docx/)** | Convert Markdown to styled Word (.docx) with AWS Orange branding, badges, and tables. | Kiro · CC · Quick | 🌐 Public |
+| 📄 **[md-to-docx](skills/md-to-docx/)** | Convert Markdown to styled Word (.docx) — AWS Orange branding or Amazon narrative (Meridian) style, badges, tables, and Mermaid diagrams. | Kiro · CC · Quick | 🌐 Public |
 | 🌐 **[translate-pptx](skills/translate-pptx/)** | Translate PowerPoint presentations between languages using LLM-native translation — no external API calls. | Kiro · CC · Quick | 🌐 Public |
 | ✂️ **[stop-slop](skills/stop-slop/)** | Remove AI writing patterns from prose — filler phrases, formulaic structures, passive voice, false agency, metronomic rhythm. Based on [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop). | Kiro · CC · Quick | 🌐 Public |
+| ✅ **[verity](skills/verity/)** | Verify an AI answer's factual grounding — decomposes it into atomic claims, checks each against retrieved sources, and scores trust (FARM). | Kiro · CC · Quick | 🌐 Public |
+| 💰 **[aws-price-check](skills/aws-price-check/)** | Check every price claim in a document against official AWS pricing for a named region — catches region mismatches and recomputes totals. | Kiro · CC | 🌐 Public |
 
 ### Why doc-skills?
 
@@ -232,6 +235,10 @@ doc-skills/
 │   │   └── SKILL.md                 #   /md-to-docx
 │   ├── translate-pptx/
 │   │   └── SKILL.md                 #   /translate-pptx
+│   ├── verity/
+│   │   └── SKILL.md                 #   /verity
+│   ├── aws-price-check/
+│   │   └── SKILL.md                 #   /aws-price-check
 │   └── stop-slop/
 │       ├── SKILL.md                 #   /stop-slop
 │       └── references/
@@ -248,6 +255,8 @@ doc-skills/
 │   ├── translate-pptx/
 │   │   ├── SKILL.md
 │   │   └── scripts/                 #   → symlink to scripts/
+│   ├── verity/
+│   │   └── SKILL.md
 │   └── stop-slop/
 │       ├── SKILL.md
 │       └── references/              #   → symlink to skills/stop-slop/references/
@@ -289,7 +298,10 @@ Skills are auto-discovered from `~/.kiro/skills/`. After running `link-kiro.sh`:
 # Invoke directly as slash command
 > /translate-pptx deck.pptx source:ko target:en
 > /md-to-docx report.md
+> /md-to-docx one-pager.md, style:meridian
 > /doc-fact-check whitepaper.md
+> /verity last response
+> /aws-price-check proposal.md region:ap-northeast-2
 
 # Or describe your intent — Kiro matches against skill descriptions
 > Translate this deck to English
