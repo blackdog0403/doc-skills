@@ -116,7 +116,7 @@ Two styles are available via the `style` input:
 | Footer | Centered date · Confidential | "Amazon Confidential" left · "Page X of Y" right |
 | Margins | 2.54 / 2.0 cm | 1.27 cm all round |
 
-Choose `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, or a black-and-white internal document ("흑백으로", "내부 문서 스타일로"). Otherwise use `aws`.
+Choose `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, a black-and-white internal document, or the equivalent request in Korean. Otherwise use `aws`.
 
 ## Styling Features
 

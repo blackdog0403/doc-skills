@@ -122,7 +122,7 @@ If no language is specified in the initial request, ask the generated-label lang
 | Footer | Centered date · Confidential | "Amazon Confidential" left · "Page X of Y" right |
 | Margins | 2.54 / 2.0 cm | 1.27 cm all round |
 
-Pick `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, or "흑백/내부 문서 스타일". Otherwise stay on `aws`.
+Pick `meridian` when the user asks for an Amazon narrative, 1-pager/6-pager, PR/FAQ, a black-and-white internal document, or the equivalent request in Korean. Otherwise stay on `aws`.
 
 ### Mermaid Diagrams
 

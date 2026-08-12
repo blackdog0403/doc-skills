@@ -5,7 +5,7 @@ description: |
   atomic claims, checks grounding against retrieved sources (AWS docs, account
   data, API results), and produces a FARM trust score.
   Use when: "verify this", "is this accurate", "fact check my answer",
-  "검증해줘", "이거 맞아?", "trust score", "grounding check".
+  "trust score", "grounding check", or equivalent requests written in Korean.
 allowed-tools: [Bash, Read, Write, WebFetch, WebSearch]
 ---
 
@@ -228,3 +228,9 @@ Generate an HTML artifact with:
 - Don't generate HTML inline — use markdown summary as default
 - Don't conflate "I said it confidently" with "it's grounded"
 - Don't report 0 flagged claims as reassuring if no verification was actually done
+
+## Output Language Safety
+
+- Preserve the input's language unless the user explicitly requests a different output language.
+- Never introduce Korean into non-Korean output, including claim tables, verdict labels, FARM scorecards, or commentary.
+- Trigger phrases and skill metadata do not determine the output language.

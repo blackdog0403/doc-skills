@@ -7,9 +7,9 @@ description: |
   files, the calculator.aws data feed), catches region mismatches (e.g. numbers
   computed with us-east-1 rates), recomputes derived totals, and produces a
   per-claim verdict table with corrections and a quality score.
-  Use when: "price check", "가격 검증", "이 가격 맞는지 확인", "verify the pricing",
-  "check AWS prices for <region>", "리전 기준 가격 맞아?", "가격 팩트체크",
-  "is this priced right for ap-northeast-2".
+  Use when: "price check", "verify the pricing", "check AWS prices for <region>",
+  "is this priced right for ap-northeast-2", or equivalent requests written in
+  Korean.
 allowed-tools: [Bash, Read, Write, Edit, WebFetch, WebSearch]
 ---
 
@@ -277,3 +277,9 @@ us-east-1 hypothesis when a total is off · state the GB basis.
 third-party calculators · assert a Deep Archive storage number is wrong without
 the INT-DAA proxy or web page · conflate transfer-only with total replication cost ·
 mark a modeled multiplier as ✅ verified.
+
+## Output Language Safety
+
+- Preserve the input document's language unless the user explicitly requests a different output language.
+- Never introduce Korean into non-Korean output, including the verdict table, corrections, region notes, or the quality score summary.
+- Trigger phrases and skill metadata do not determine the output language.
